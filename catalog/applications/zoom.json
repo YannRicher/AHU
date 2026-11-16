@@ -1,0 +1,31 @@
+{
+  "Id": "Zoom",
+  "Name": "Zoom Workplace (64 bits)",
+  "Mode": "Auto",
+  "Version": "7.2.51704",
+  "DownloadUrl": "https://cdn.zoom.us/prod/7.2.5.51704/x64/ZoomInstallerFull.msi",
+  "Sha256": "8E81E0D7DC401880C4CDFD14DB8BED51308608B7AA67FA1E2CA31CCAA71CAD93",
+  "InstallerType": "MSI",
+  "InstallArguments": "/qn /norestart",
+  "DetectionName": [
+    "Zoom Workplace (64-bit)",
+    "Zoom (64-bit)"
+  ],
+  "DetectionExclude": [
+    "*VDI*",
+    "*Plugin*",
+    "*Rooms*"
+  ],
+  "DetectionPublisher": "Zoom*",
+  "InstallIfMissing": false,
+  "ConflictingProcesses": [
+    "Zoom"
+  ],
+  "ConflictAction": "Skip",
+  "SignerSubject": "Zoom",
+  "Updater": {
+    "Type": "RedirectMsi",
+    "Url": "https://zoom.us/client/latest/ZoomInstallerFull.msi?archType=x64"
+  },
+  "LastUpdated": "2026-11-16"
+}

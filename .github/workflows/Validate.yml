@@ -1,0 +1,54 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer Pester 5
+        shell: pwsh
+        run: Save-Module Pester -MinimumVersion 5.5.0 -Path "$env:RUNNER_TEMP\modules" -Force
+
+      - name: Tests - PowerShell 7
+        shell: pwsh
+        run: |
+          Import-Module (Get-ChildItem "$env:RUNNER_TEMP\modules\Pester\*\Pester.psd1").FullName -Force
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+
+      - name: Tests - Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          Import-Module (Get-ChildItem "$env:RUNNER_TEMP\modules\Pester\*\Pester.psd1").FullName -Force
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+
+      - name: Validation du catalogue
+        shell: pwsh
+        run: ./automation/Test-Catalog.ps1
+
+      - name: Fichiers generes a jour
+        shell: pwsh
+        run: |
+          ./automation/Build-Catalog.ps1
+          ./automation/Build-IntuneScripts.ps1
+          git diff --exit-code -- catalog/apps.json intune/
+          if ($LASTEXITCODE -ne 0) {
+            throw 'apps.json ou intune/*.ps1 ne sont pas a jour: executer automation/Build-Catalog.ps1 et automation/Build-IntuneScripts.ps1'
+          }

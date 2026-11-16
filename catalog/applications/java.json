@@ -1,0 +1,8 @@
+{
+  "Id": "Java",
+  "Name": "Java 8 (Oracle JRE)",
+  "Mode": "Manual",
+  "DetectionName": "Java 8 Update*",
+  "DetectionPublisher": "Oracle*",
+  "Notes": "Cible: mode Pinned (licence Oracle a valider). Alternative recommandee: Eclipse Temurin (MSI) en mode Auto."
+}

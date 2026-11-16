@@ -1,0 +1,12 @@
+{
+  "Id": "VSCode",
+  "Name": "Microsoft Visual Studio Code (installation systeme)",
+  "Mode": "Manual",
+  "DetectionName": "Microsoft Visual Studio Code",
+  "DetectionExclude": [
+    "*(User)*",
+    "*Insiders*"
+  ],
+  "DetectionPublisher": "Microsoft*",
+  "Notes": "A passer en Auto avec un fournisseur VSCodeApi (https://update.code.visualstudio.com/api/update/win32-x64/stable/latest)."
+}

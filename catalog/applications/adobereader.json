@@ -1,0 +1,11 @@
+{
+  "Id": "AdobeReader",
+  "Name": "Adobe Acrobat Reader",
+  "Mode": "Manual",
+  "DetectionName": [
+    "Adobe Acrobat Reader*",
+    "Adobe Acrobat (64-bit)"
+  ],
+  "DetectionPublisher": "Adobe*",
+  "Notes": "Cible: mode Pinned. Renseigner Version, DownloadUrl, Sha256, InstallerType et InstallArguments (ex.: /sAll /rs /msi EULA_ACCEPT=YES) via automation/Get-InstallerInfo.ps1."
+}

@@ -1,0 +1,95 @@
+name: Update catalog
+
+# Verifie les nouvelles versions des applications en mode Auto, met a jour leurs manifestes,
+# regenere catalog/apps.json et publie le tout en un seul commit.
+
+on:
+  schedule:
+    - cron: '0 10 * * *' # tous les jours vers 5 h / 6 h (heure de Montreal)
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Id d'une application (vide = toutes les applications Auto)"
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-update
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.list.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: list
+        shell: pwsh
+        env:
+          APP_ID: ${{ inputs.app }}
+        run: ./automation/Get-UpdatableApp.ps1 -AppId $env:APP_ID
+
+  update:
+    needs: discover
+    if: needs.discover.outputs.apps != '[]'
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.discover.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: update
+        shell: pwsh
+        env:
+          APP_ID: ${{ matrix.app }}
+        run: ./automation/Update-AppManifest.ps1 -AppId $env:APP_ID
+
+      - if: steps.update.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-${{ matrix.app }}
+          path: ${{ steps.update.outputs.manifest }}
+          retention-days: 5
+
+  publish:
+    needs: [discover, update]
+    if: always() && needs.discover.result == 'success' && needs.discover.outputs.apps != '[]'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recuperer les manifestes modifies
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: manifest-*
+          path: catalog/applications
+          merge-multiple: true
+
+      - name: Generer et valider le catalogue
+        shell: pwsh
+        run: |
+          ./automation/Build-Catalog.ps1
+          ./automation/Test-Catalog.ps1
+
+      - name: Commit
+        shell: pwsh
+        run: |
+          git add catalog
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'Aucune nouvelle version.'
+            exit 0
+          }
+          $apps = git diff --cached --name-only -- catalog/applications | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_) }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "catalog: mise a jour automatique ($($apps -join ', '))"
+          git push
