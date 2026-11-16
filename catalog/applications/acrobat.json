@@ -1,0 +1,13 @@
+{
+  "Id": "Acrobat",
+  "Name": "Adobe Acrobat (version payante, inventaire seulement)",
+  "Mode": "Manual",
+  "DetectionName": [
+    "Adobe Acrobat*"
+  ],
+  "DetectionExclude": [
+    "*Reader*"
+  ],
+  "DetectionPublisher": "Adobe*",
+  "Notes": "Inventaire seulement: AHU ne met pas Acrobat a jour. Acrobat est un produit distinct de Reader (adobereader.json)."
+}

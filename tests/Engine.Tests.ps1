@@ -134,6 +134,32 @@ Describe 'Find-AhuInstalledApp' {
         (Find-AhuInstalledApp -App $app -Entries @(New-TestEntry 'Zoom Workplace (64-bit)' '7.0')).DisplayVersion | Should -Be '7.0'
     }
 
+    It 'Adobe Reader ne detecte pas Acrobat (produit distinct)' {
+        $reader = Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'catalog\applications\adobereader.json') -Raw | ConvertFrom-Json
+        $reader | Add-Member -NotePropertyName Id -NotePropertyValue 'AdobeReader' -Force
+        $acrobat = New-TestEntry 'Adobe Acrobat (64-bit)' '26.002.22031' 'Adobe'
+        Find-AhuInstalledApp -App $reader -Entries @($acrobat) | Should -BeNullOrEmpty
+    }
+
+    It 'Adobe Reader detecte Reader, meme si Acrobat est aussi installe' {
+        $reader = Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'catalog\applications\adobereader.json') -Raw | ConvertFrom-Json
+        $entries = @(
+            New-TestEntry 'Adobe Acrobat (64-bit)' '26.002.22031' 'Adobe'
+            New-TestEntry 'Adobe Acrobat Reader (64-bit)' '25.001.20531' 'Adobe'
+        )
+        (Find-AhuInstalledApp -App $reader -Entries $entries).DisplayName | Should -Be 'Adobe Acrobat Reader (64-bit)'
+    }
+
+    It 'entree Acrobat (Manual) detecte Acrobat mais pas Reader' {
+        $acrobat = Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'catalog\applications\acrobat.json') -Raw | ConvertFrom-Json
+        $acrobat | Add-Member -NotePropertyName Id -NotePropertyValue 'Acrobat' -Force
+        $entries = @(
+            New-TestEntry 'Adobe Acrobat (64-bit)' '26.002.22031' 'Adobe'
+            New-TestEntry 'Adobe Acrobat Reader (64-bit)' '25.001.20531' 'Adobe'
+        )
+        (Find-AhuInstalledApp -App $acrobat -Entries $entries).DisplayName | Should -Be 'Adobe Acrobat (64-bit)'
+    }
+
     It 'retourne null si absent' {
         Find-AhuInstalledApp -App (New-TestApp @{}) -Entries @(New-TestEntry 'Autre' '1.0') | Should -BeNullOrEmpty
     }

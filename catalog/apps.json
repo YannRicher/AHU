@@ -4,15 +4,30 @@
     "Paused": false
   },
   "Applications": {
+    "Acrobat": {
+      "Name": "Adobe Acrobat (version payante, inventaire seulement)",
+      "Mode": "Manual",
+      "DetectionName": [
+        "Adobe Acrobat*"
+      ],
+      "DetectionExclude": [
+        "*Reader*"
+      ],
+      "DetectionPublisher": "Adobe*",
+      "Notes": "Inventaire seulement: AHU ne met pas Acrobat a jour. Acrobat est un produit distinct de Reader (adobereader.json)."
+    },
     "AdobeReader": {
       "Name": "Adobe Acrobat Reader",
       "Mode": "Manual",
       "DetectionName": [
-        "Adobe Acrobat Reader*",
-        "Adobe Acrobat (64-bit)"
+        "Adobe Acrobat Reader*"
+      ],
+      "DetectionExclude": [
+        "Adobe Acrobat (64-bit)",
+        "Adobe Acrobat (32-bit)"
       ],
       "DetectionPublisher": "Adobe*",
-      "Notes": "Cible: mode Pinned. Renseigner Version, DownloadUrl, Sha256, InstallerType et InstallArguments (ex.: /sAll /rs /msi EULA_ACCEPT=YES) via automation/Get-InstallerInfo.ps1."
+      "Notes": "Cible: mode Pinned. Acrobat (version payante, DisplayName 'Adobe Acrobat (64-bit)') est un produit distinct et n'est jamais detecte ici. Renseigner Version, DownloadUrl, Sha256, InstallerType et InstallArguments (ex.: /sAll /rs /msi EULA_ACCEPT=YES) via automation/Get-InstallerInfo.ps1."
     },
     "Java": {
       "Name": "Java 8 (Oracle JRE)",
