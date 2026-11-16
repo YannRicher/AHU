@@ -140,6 +140,72 @@ function Invoke-AhuProcess {
     }
 }
 
+function Split-AhuUninstallCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandLine
+    )
+
+    $commandLine = $CommandLine.Trim()
+    if ($commandLine -match '^"([^"]+)"(?:\s+(.*))?$') {
+        return [pscustomobject]@{ FilePath = $Matches[1]; Arguments = [string]$Matches[2] }
+    }
+
+    $parts = $commandLine -split '\s+', 2
+    [pscustomobject]@{
+        FilePath  = $parts[0]
+        Arguments = $(if ($parts.Count -gt 1) { $parts[1] } else { '' })
+    }
+}
+
+function Uninstall-AhuUserInstall {
+    <#
+        Desinstalle une copie par utilisateur (HKCU) via sa UninstallString, en silencieux.
+        Utilise quand ReplaceUserInstall est vrai, pour remplacer la copie personnelle par l'installation machine.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $App,
+
+        [Parameter(Mandatory = $true)]
+        $Entry
+    )
+
+    $commandLine = [string]$Entry.UninstallString
+    if ([string]::IsNullOrWhiteSpace($commandLine)) {
+        Write-AhuLog ('{0}: installation utilisateur {1} sans UninstallString' -f $App.Id, $Entry.DisplayVersion) -Level Warning
+        return $false
+    }
+
+    $command = Split-AhuUninstallCommand -CommandLine $commandLine
+    if (-not (Test-Path -LiteralPath $command.FilePath)) {
+        Write-AhuLog ('{0}: desinstallateur introuvable ({1})' -f $App.Id, $command.FilePath) -Level Warning
+        return $false
+    }
+
+    $arguments = $command.Arguments
+    if ($arguments -notmatch '(?i)(^|\s)(/silent|/quiet|/qn)(\s|$)') {
+        $arguments = ('{0} /silent' -f $arguments).Trim()
+    }
+
+    try {
+        Write-AhuLog ('{0}: desinstallation de l''installation utilisateur {1} ({2} {3})' -f $App.Id, $Entry.DisplayVersion, $command.FilePath, $arguments)
+        $exitCode = Invoke-AhuProcess -FilePath $command.FilePath -Arguments $arguments -TimeoutMinutes 15
+        if ($exitCode -ne 0) {
+            Write-AhuLog ('{0}: desinstallation utilisateur terminee avec le code {1}' -f $App.Id, $exitCode) -Level Warning
+            return $false
+        }
+        Write-AhuLog ('{0}: installation utilisateur {1} retiree' -f $App.Id, $Entry.DisplayVersion)
+        return $true
+    }
+    catch {
+        Write-AhuLog ('{0}: echec de la desinstallation utilisateur - {1}' -f $App.Id, $_.Exception.Message) -Level Error
+        return $false
+    }
+}
+
 function Install-AhuApp {
     <#
         Telecharge, verifie (SHA256 + signature Authenticode) et installe silencieusement une application du catalogue.
@@ -263,4 +329,4 @@ function Install-AhuApp {
     }
 }
 
-Export-ModuleMember -Function New-AhuInstallResult, Save-AhuFile, Get-AhuInstallerFileName, Get-AhuConflictingProcess, Invoke-AhuProcess, Install-AhuApp
+Export-ModuleMember -Function New-AhuInstallResult, Save-AhuFile, Get-AhuInstallerFileName, Get-AhuConflictingProcess, Invoke-AhuProcess, Split-AhuUninstallCommand, Uninstall-AhuUserInstall, Install-AhuApp

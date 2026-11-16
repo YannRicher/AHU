@@ -57,8 +57,12 @@
       "InstallArguments": "/qn /norestart",
       "DetectionName": [
         "Zoom Workplace (64-bit)",
-        "Zoom (64-bit)"
+        "Zoom Workplace (32-bit)",
+        "Zoom (64-bit)",
+        "Zoom (32-bit)",
+        "=Zoom"
       ],
+      "ReplaceUserInstall": true,
       "DetectionExclude": [
         "*VDI*",
         "*Plugin*",

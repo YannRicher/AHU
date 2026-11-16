@@ -83,7 +83,8 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
   "Sha256": "8E81E0D7DC401880C4CDFD14DB8BED51308608B7AA67FA1E2CA31CCAA71CAD93",
   "InstallerType": "MSI",
   "InstallArguments": "/qn /norestart",
-  "DetectionName": ["Zoom Workplace (64-bit)", "Zoom (64-bit)"],
+  "DetectionName": ["Zoom Workplace (64-bit)", "Zoom (64-bit)", "=Zoom"],
+  "ReplaceUserInstall": true,
   "DetectionExclude": ["*VDI*", "*Plugin*", "*Rooms*"],
   "DetectionPublisher": "Zoom*",
   "InstallIfMissing": false,
@@ -98,7 +99,7 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 |-------|-------------|-------------|
 | `Id` | oui | Identifiant unique. Le fichier doit s'appeler `<id en minuscules>.json`. |
 | `Mode` | oui | `Auto`, `Pinned` ou `Manual`. |
-| `DetectionName` | oui | Nom(s) dans « Programmes et fonctionnalités ». Sans `*` ni `?`, la correspondance est partielle (`Workplace` = `*Workplace*`). |
+| `DetectionName` | oui | Nom(s) dans « Programmes et fonctionnalités ». Sans `*` ni `?`, la correspondance est partielle (`Workplace` = `*Workplace*`). Un préfixe `=` exige le nom exact (`=Zoom` ne prend pas « Zoom Outlook Plugin »). Les copies par utilisateur (ruche chargée) sont vues aussi. |
 | `DetectionExclude` | non | Noms à ignorer (plugins, VDI…). |
 | `DetectionPublisher` | non | Filtre sur l'éditeur. |
 | `Version` | Auto/Pinned | Version **telle qu'écrite dans le registre** (`DisplayVersion`). |
@@ -107,6 +108,7 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 | `InstallerType` | Auto/Pinned | `MSI` (`msiexec /i … /L*v`) ou `EXE`. |
 | `InstallArguments` | non | Arguments silencieux. |
 | `InstallIfMissing` | non | `false` par défaut : mise à jour seulement. |
+| `ReplaceUserInstall` | non | Avant l'installation machine, désinstalle les copies par utilisateur détectées (Zoom personnel dans `%AppData%`). |
 | `ConflictingProcesses` | non | Processus qui empêchent l'installation (ex. réunion Zoom en cours). |
 | `ConflictAction` | non | `Skip` (défaut : report au prochain cycle) ou `Kill`. |
 | `RequireSignature` | non | `true` par défaut : signature Authenticode valide exigée. |

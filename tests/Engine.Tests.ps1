@@ -37,6 +37,7 @@ Describe 'Compare-AhuVersion' {
         @{ Version = '24.09';        Reference = '24.08';        Expected = 1 }
         @{ Version = '1.2';          Reference = '1.2.0.0';      Expected = 0 }
         @{ Version = '8.0.4310.10';  Reference = '8.0.4410.7';   Expected = -1 }
+        @{ Version = '5.16.10 (26186)'; Reference = '7.2.51704'; Expected = -1 }
         @{ Version = '';             Reference = '1.0';          Expected = -1 }
     ) {
         Compare-AhuVersion $Version $Reference | Should -Be $Expected
@@ -127,6 +128,24 @@ Describe 'Find-AhuInstalledApp' {
     It 'filtre par editeur' {
         $app = New-TestApp @{ DetectionPublisher = 'Zoom*' }
         Find-AhuInstalledApp -App $app -Entries @(New-TestEntry 'Zoom (64-bit)' '1.0' 'Autre editeur') | Should -BeNullOrEmpty
+    }
+
+    It 'le prefixe = exige le nom exact' {
+        $app = New-TestApp @{ DetectionName = @('=Zoom'); DetectionExclude = @() }
+        (Find-AhuInstalledApp -App $app -Entries @(New-TestEntry 'Zoom' '5.16.10 (26186)')).DisplayVersion | Should -Be '5.16.10 (26186)'
+        Find-AhuInstalledApp -App $app -Entries @(New-TestEntry 'Zoom Outlook Plugin' '5.16.10') | Should -BeNullOrEmpty
+    }
+
+    It 'le manifeste Zoom reconnait Zoom 5.16 personnel et ignore le plugin' {
+        $zoom = Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'catalog\applications\zoom.json') -Raw | ConvertFrom-Json
+        $entries = @(
+            New-TestEntry 'Zoom' '5.16.10 (26186)'
+            New-TestEntry 'Zoom Outlook Plugin' '5.16.10'
+        )
+        $found = @(Find-AhuInstalledApp -App $zoom -Entries $entries -All)
+        $found.Count | Should -Be 1
+        $found[0].DisplayName | Should -Be 'Zoom'
+        (Get-AhuAppDecision -App $zoom -InstalledVersion $found[0].DisplayVersion).NeedsAction | Should -BeTrue
     }
 
     It 'sans joker, correspondance partielle' {

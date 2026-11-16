@@ -384,10 +384,53 @@ function Get-AhuCatalogApp {
 #region engine/Modules/Detection.psm1
 # AHU - Detection des applications installees et decision de conformite
 
+function Read-AhuUninstallRoot {
+    <#
+        Lit les entrees d'une cle Uninstall deja ouverte. Scope: Machine ou User.
+    #>
+    param(
+        $RootKey,
+        [string]$Scope,
+        [string]$UserSid,
+        [string]$RegistryView
+    )
+
+    foreach ($keyName in $RootKey.GetSubKeyNames()) {
+        $key = $null
+        try {
+            $key = $RootKey.OpenSubKey($keyName)
+            if ($null -eq $key) { continue }
+
+            $displayName = [string]$key.GetValue('DisplayName', '')
+            if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
+
+            [pscustomobject]@{
+                DisplayName      = $displayName.Trim()
+                DisplayVersion   = ([string]$key.GetValue('DisplayVersion', '')).Trim()
+                Publisher        = [string]$key.GetValue('Publisher', '')
+                UninstallString  = [string]$key.GetValue('UninstallString', '')
+                WindowsInstaller = ([string]$key.GetValue('WindowsInstaller', '') -eq '1')
+                KeyName          = $keyName
+                RegistryView     = $RegistryView
+                Scope            = $Scope
+                UserSid          = $UserSid
+            }
+        }
+        catch {
+            Write-Verbose ('Cle ignoree {0}: {1}' -f $keyName, $_.Exception.Message)
+        }
+        finally {
+            if ($null -ne $key) { $key.Close() }
+        }
+    }
+}
+
 function Get-AhuUninstallEntry {
     <#
-        Lit les entrees "Programmes et fonctionnalites" machine (vues 64 et 32 bits),
-        independamment du fait que le script tourne en 32 ou 64 bits.
+        Lit "Programmes et fonctionnalites":
+          - machine (HKLM, vues 64 et 32 bits)
+          - utilisateurs dont la ruche est chargee (HKU\<SID>), y compris en session SYSTEM
+        Les profils non charges (utilisateur deconnecte) sont vus au prochain passage, une fois la session ouverte.
     #>
     [CmdletBinding()]
     param()
@@ -404,38 +447,39 @@ function Get-AhuUninstallEntry {
             $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view)
             $root = $base.OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall')
             if ($null -eq $root) { continue }
-
-            foreach ($keyName in $root.GetSubKeyNames()) {
-                $key = $null
-                try {
-                    $key = $root.OpenSubKey($keyName)
-                    if ($null -eq $key) { continue }
-
-                    $displayName = [string]$key.GetValue('DisplayName', '')
-                    if ([string]::IsNullOrWhiteSpace($displayName)) { continue }
-
-                    [pscustomobject]@{
-                        DisplayName      = $displayName.Trim()
-                        DisplayVersion   = ([string]$key.GetValue('DisplayVersion', '')).Trim()
-                        Publisher        = [string]$key.GetValue('Publisher', '')
-                        UninstallString  = [string]$key.GetValue('UninstallString', '')
-                        WindowsInstaller = ([string]$key.GetValue('WindowsInstaller', '') -eq '1')
-                        KeyName          = $keyName
-                        RegistryView     = [string]$view
-                    }
-                }
-                catch {
-                    Write-Verbose ('Cle ignoree {0}: {1}' -f $keyName, $_.Exception.Message)
-                }
-                finally {
-                    if ($null -ne $key) { $key.Close() }
-                }
-            }
+            Read-AhuUninstallRoot -RootKey $root -Scope 'Machine' -RegistryView ([string]$view)
         }
         finally {
             if ($null -ne $root) { $root.Close() }
             if ($null -ne $base) { $base.Close() }
         }
+    }
+
+    $userView = if ([Environment]::Is64BitOperatingSystem) { [Microsoft.Win32.RegistryView]::Registry64 } else { [Microsoft.Win32.RegistryView]::Registry32 }
+    $users = $null
+    try {
+        $users = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::Users, $userView)
+        foreach ($sid in $users.GetSubKeyNames()) {
+            if ($sid -notmatch '^S-1-5-21-\d+-\d+-\d+-\d+$') { continue }
+
+            foreach ($subKey in @(
+                    'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+                    'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+                )) {
+                $root = $null
+                try {
+                    $root = $users.OpenSubKey("$sid\$subKey")
+                    if ($null -eq $root) { continue }
+                    Read-AhuUninstallRoot -RootKey $root -Scope 'User' -UserSid $sid -RegistryView ([string]$userView)
+                }
+                finally {
+                    if ($null -ne $root) { $root.Close() }
+                }
+            }
+        }
+    }
+    finally {
+        if ($null -ne $users) { $users.Close() }
     }
 }
 
@@ -465,6 +509,11 @@ function Test-AhuNameMatch {
 
     foreach ($p in @($Pattern)) {
         if ([string]::IsNullOrWhiteSpace($p)) { continue }
+        # "=Zoom" : egalite stricte (ne pas confondre avec "Zoom Outlook Plugin")
+        if ($p.StartsWith('=')) {
+            if ($Value -eq $p.Substring(1)) { return $true }
+            continue
+        }
         if ($Value -like (ConvertTo-AhuLikePattern $p)) { return $true }
     }
     return $false
@@ -472,15 +521,19 @@ function Test-AhuNameMatch {
 
 function Find-AhuInstalledApp {
     <#
-        Retourne l'entree installee correspondant a l'application (la plus haute version si plusieurs), ou $null.
-        Champs du catalogue utilises: DetectionName, DetectionExclude, DetectionPublisher.
+        Retourne l'entree installee correspondant a l'application.
+        Sans -All: la plus haute version (ou $null).
+        Avec -All: toutes les correspondances, la plus ancienne en premier.
+        Champs du catalogue: DetectionName (=Nom pour une egalite stricte), DetectionExclude, DetectionPublisher.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
         $App,
 
-        [object[]]$Entries
+        [object[]]$Entries,
+
+        [switch]$All
     )
 
     if (-not $PSBoundParameters.ContainsKey('Entries')) {
@@ -491,19 +544,24 @@ function Find-AhuInstalledApp {
     $exclude = @(Get-AhuValue $App 'DetectionExclude' @())
     $publisher = @(Get-AhuValue $App 'DetectionPublisher' @())
 
-    $best = $null
-    foreach ($entry in $Entries) {
+    $found = foreach ($entry in $Entries) {
         if (-not (Test-AhuNameMatch -Value $entry.DisplayName -Pattern $include)) { continue }
         if ($exclude.Count -gt 0 -and (Test-AhuNameMatch -Value $entry.DisplayName -Pattern $exclude)) { continue }
         if ($publisher.Count -gt 0 -and -not (Test-AhuNameMatch -Value $entry.Publisher -Pattern $publisher)) { continue }
         if (-not (Test-AhuVersionString $entry.DisplayVersion)) { continue }
-
-        if ($null -eq $best -or (Compare-AhuVersion $entry.DisplayVersion $best.DisplayVersion) -gt 0) {
-            $best = $entry
-        }
+        $entry
     }
 
-    $best
+    $sorted = @($found | Sort-Object -Property @{
+            Expression = {
+                $parts = @(ConvertTo-AhuVersionPart $_.DisplayVersion)
+                (@($parts | ForEach-Object { '{0:D12}' -f [int64]$_ })) -join '.'
+            }
+        })
+
+    if ($sorted.Count -eq 0) { return }
+    if ($All) { return $sorted }
+    return $sorted[-1]
 }
 
 function Get-AhuAppDecision {
@@ -730,6 +788,72 @@ function Invoke-AhuProcess {
     }
 }
 
+function Split-AhuUninstallCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandLine
+    )
+
+    $commandLine = $CommandLine.Trim()
+    if ($commandLine -match '^"([^"]+)"(?:\s+(.*))?$') {
+        return [pscustomobject]@{ FilePath = $Matches[1]; Arguments = [string]$Matches[2] }
+    }
+
+    $parts = $commandLine -split '\s+', 2
+    [pscustomobject]@{
+        FilePath  = $parts[0]
+        Arguments = $(if ($parts.Count -gt 1) { $parts[1] } else { '' })
+    }
+}
+
+function Uninstall-AhuUserInstall {
+    <#
+        Desinstalle une copie par utilisateur (HKCU) via sa UninstallString, en silencieux.
+        Utilise quand ReplaceUserInstall est vrai, pour remplacer la copie personnelle par l'installation machine.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $App,
+
+        [Parameter(Mandatory = $true)]
+        $Entry
+    )
+
+    $commandLine = [string]$Entry.UninstallString
+    if ([string]::IsNullOrWhiteSpace($commandLine)) {
+        Write-AhuLog ('{0}: installation utilisateur {1} sans UninstallString' -f $App.Id, $Entry.DisplayVersion) -Level Warning
+        return $false
+    }
+
+    $command = Split-AhuUninstallCommand -CommandLine $commandLine
+    if (-not (Test-Path -LiteralPath $command.FilePath)) {
+        Write-AhuLog ('{0}: desinstallateur introuvable ({1})' -f $App.Id, $command.FilePath) -Level Warning
+        return $false
+    }
+
+    $arguments = $command.Arguments
+    if ($arguments -notmatch '(?i)(^|\s)(/silent|/quiet|/qn)(\s|$)') {
+        $arguments = ('{0} /silent' -f $arguments).Trim()
+    }
+
+    try {
+        Write-AhuLog ('{0}: desinstallation de l''installation utilisateur {1} ({2} {3})' -f $App.Id, $Entry.DisplayVersion, $command.FilePath, $arguments)
+        $exitCode = Invoke-AhuProcess -FilePath $command.FilePath -Arguments $arguments -TimeoutMinutes 15
+        if ($exitCode -ne 0) {
+            Write-AhuLog ('{0}: desinstallation utilisateur terminee avec le code {1}' -f $App.Id, $exitCode) -Level Warning
+            return $false
+        }
+        Write-AhuLog ('{0}: installation utilisateur {1} retiree' -f $App.Id, $Entry.DisplayVersion)
+        return $true
+    }
+    catch {
+        Write-AhuLog ('{0}: echec de la desinstallation utilisateur - {1}' -f $App.Id, $_.Exception.Message) -Level Error
+        return $false
+    }
+}
+
 function Install-AhuApp {
     <#
         Telecharge, verifie (SHA256 + signature Authenticode) et installe silencieusement une application du catalogue.
@@ -952,22 +1076,52 @@ function Invoke-AhuEngine {
                     continue
                 }
 
-                $entry = Find-AhuInstalledApp -App $app -Entries $entries
+                $matches = @(Find-AhuInstalledApp -App $app -Entries $entries -All)
+                $entry = if ($matches.Count -gt 0) { $matches[0] } else { $null }
                 $installedVersion = if ($entry) { $entry.DisplayVersion } else { $null }
                 $decision = Get-AhuAppDecision -App $app -InstalledVersion $installedVersion
+                $detail = $decision.Message
+                if ($entry.Scope -eq 'User') { $detail = $detail -replace 'detectee', 'detectee [installation utilisateur]' }
 
                 if ($entry -or $explicit -or $decision.NeedsAction) {
-                    Write-AhuLog ('{0}: {1}' -f $app.Id, $decision.Message)
+                    Write-AhuLog ('{0}: {1}' -f $app.Id, $detail)
                 }
 
                 if (-not $decision.NeedsAction) {
-                    if ($entry -or $explicit) { $summary.Add(('{0}: {1}' -f $app.Id, $decision.Message)) }
+                    if ($entry -or $explicit) { $summary.Add(('{0}: {1}' -f $app.Id, $detail)) }
                     continue
                 }
 
                 if ($Action -eq 'Detect') {
                     $needsAction = $true
-                    $summary.Add(('{0}: {1}' -f $app.Id, $decision.Message))
+                    $summary.Add(('{0}: {1}' -f $app.Id, $detail))
+                    continue
+                }
+
+                $userMatches = @($matches | Where-Object { $_.Scope -eq 'User' })
+                if ($userMatches.Count -gt 0 -and [bool](Get-AhuValue $app 'ReplaceUserInstall' $false)) {
+                    $conflicts = @(Get-AhuConflictingProcess -App $app)
+                    if ($conflicts.Count -gt 0 -and [string](Get-AhuValue $app 'ConflictAction' 'Skip') -eq 'Skip') {
+                        $names = (@($conflicts | ForEach-Object { $_.ProcessName } | Select-Object -Unique)) -join ', '
+                        $deferred = 'installation reportee, processus en cours d''execution: {0}' -f $names
+                        Write-AhuLog ('{0}: {1}' -f $app.Id, $deferred) -Level Warning
+                        $summary.Add(('{0}: {1}' -f $app.Id, $deferred))
+                        continue
+                    }
+
+                    foreach ($userEntry in $userMatches) {
+                        if (-not (Uninstall-AhuUserInstall -App $app -Entry $userEntry)) { $failed = $true }
+                    }
+                }
+
+                $machineEntries = @(Get-AhuUninstallEntry | Where-Object { $_.Scope -eq 'Machine' })
+                $machine = Find-AhuInstalledApp -App $app -Entries $machineEntries
+                $target = [string](Get-AhuValue $app 'Version' '')
+                $machineBehind = ($null -eq $machine) -or ((Compare-AhuVersion $machine.DisplayVersion $target) -lt 0)
+                if (-not $machineBehind) {
+                    $kept = 'version machine {0} deja a jour' -f $machine.DisplayVersion
+                    Write-AhuLog ('{0}: {1}' -f $app.Id, $kept)
+                    $summary.Add(('{0}: {1}' -f $app.Id, $kept))
                     continue
                 }
 

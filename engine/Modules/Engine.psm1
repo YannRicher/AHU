@@ -94,22 +94,52 @@ function Invoke-AhuEngine {
                     continue
                 }
 
-                $entry = Find-AhuInstalledApp -App $app -Entries $entries
+                $matches = @(Find-AhuInstalledApp -App $app -Entries $entries -All)
+                $entry = if ($matches.Count -gt 0) { $matches[0] } else { $null }
                 $installedVersion = if ($entry) { $entry.DisplayVersion } else { $null }
                 $decision = Get-AhuAppDecision -App $app -InstalledVersion $installedVersion
+                $detail = $decision.Message
+                if ($entry.Scope -eq 'User') { $detail = $detail -replace 'detectee', 'detectee [installation utilisateur]' }
 
                 if ($entry -or $explicit -or $decision.NeedsAction) {
-                    Write-AhuLog ('{0}: {1}' -f $app.Id, $decision.Message)
+                    Write-AhuLog ('{0}: {1}' -f $app.Id, $detail)
                 }
 
                 if (-not $decision.NeedsAction) {
-                    if ($entry -or $explicit) { $summary.Add(('{0}: {1}' -f $app.Id, $decision.Message)) }
+                    if ($entry -or $explicit) { $summary.Add(('{0}: {1}' -f $app.Id, $detail)) }
                     continue
                 }
 
                 if ($Action -eq 'Detect') {
                     $needsAction = $true
-                    $summary.Add(('{0}: {1}' -f $app.Id, $decision.Message))
+                    $summary.Add(('{0}: {1}' -f $app.Id, $detail))
+                    continue
+                }
+
+                $userMatches = @($matches | Where-Object { $_.Scope -eq 'User' })
+                if ($userMatches.Count -gt 0 -and [bool](Get-AhuValue $app 'ReplaceUserInstall' $false)) {
+                    $conflicts = @(Get-AhuConflictingProcess -App $app)
+                    if ($conflicts.Count -gt 0 -and [string](Get-AhuValue $app 'ConflictAction' 'Skip') -eq 'Skip') {
+                        $names = (@($conflicts | ForEach-Object { $_.ProcessName } | Select-Object -Unique)) -join ', '
+                        $deferred = 'installation reportee, processus en cours d''execution: {0}' -f $names
+                        Write-AhuLog ('{0}: {1}' -f $app.Id, $deferred) -Level Warning
+                        $summary.Add(('{0}: {1}' -f $app.Id, $deferred))
+                        continue
+                    }
+
+                    foreach ($userEntry in $userMatches) {
+                        if (-not (Uninstall-AhuUserInstall -App $app -Entry $userEntry)) { $failed = $true }
+                    }
+                }
+
+                $machineEntries = @(Get-AhuUninstallEntry | Where-Object { $_.Scope -eq 'Machine' })
+                $machine = Find-AhuInstalledApp -App $app -Entries $machineEntries
+                $target = [string](Get-AhuValue $app 'Version' '')
+                $machineBehind = ($null -eq $machine) -or ((Compare-AhuVersion $machine.DisplayVersion $target) -lt 0)
+                if (-not $machineBehind) {
+                    $kept = 'version machine {0} deja a jour' -f $machine.DisplayVersion
+                    Write-AhuLog ('{0}: {1}' -f $app.Id, $kept)
+                    $summary.Add(('{0}: {1}' -f $app.Id, $kept))
                     continue
                 }
 
