@@ -112,7 +112,7 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 | `ReplaceUserInstall` | non | Avant l'installation machine, désinstalle les copies par utilisateur détectées (Zoom personnel dans `%AppData%`). |
 | `ConflictingProcesses` | non | Processus qui empêchent l'installation (ex. réunion Zoom en cours). |
 | `ConflictAction` | non | `Skip` (défaut : report au prochain cycle) ou `Kill`. |
-| `RequireSignature` | non | `true` par défaut : signature Authenticode valide exigée. |
+| `RequireSignature` | non | `true` par défaut : signature Authenticode valide exigée (poste **et** pipeline). Mettre `false` seulement si l'éditeur ne signe pas (ex. 7-Zip) : le SHA256 reste vérifié, mais l'intégrité repose alors sur la source (dépôt officiel). Documenter la raison dans `Notes`. |
 | `SignerSubject` | non | Texte attendu dans le sujet du certificat de signature. |
 | `SuccessExitCodes` | non | Défaut `[0, 1641, 3010]`. |
 | `InstallTimeoutMinutes` | non | Défaut `30`. |
@@ -214,7 +214,12 @@ pwsh ./automation/Test-Catalog.ps1
 
 Vérifier sur un poste test que `Version` correspond **exactement** à la `DisplayVersion` du registre après l'installation. Pour un EXE, c'est la seule source fiable.
 
-**Auto** : créer le manifeste avec une section `Updater`. Si un fournisseur existant convient (`RedirectMsi` pour tout lien « latest » qui redirige vers un MSI versionné), il n'y a aucun code à écrire. Sinon, ajouter `automation/Providers/<Type>.ps1` (voir `ARCHITECTURE.md`).
+**Auto** : créer le manifeste avec une section `Updater`. Fournisseurs disponibles :
+
+- `RedirectMsi` : un lien « latest » stable qui redirige vers un MSI versionné (Zoom).
+- `GitHubRelease` : le dernier asset d'une release GitHub publique, avec `Repo` (ex. `ip7z/7zip`) et `AssetPattern` (ex. `7z*-x64.exe`) (7-Zip).
+
+Sinon, ajouter `automation/Providers/<Type>.ps1` (voir `ARCHITECTURE.md`). Une nouvelle application Auto arrive d'abord dans l'anneau pilote ; la promotion en production est manuelle (voir « Anneaux »).
 
 ## Tests locaux
 

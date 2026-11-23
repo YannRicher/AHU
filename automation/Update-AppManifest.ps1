@@ -62,12 +62,14 @@ try {
         return
     }
 
-    if ($latest.SignatureStatus -and $latest.SignatureStatus -ne 'Valid') {
+    # RequireSignature: false = exception explicite (ex. 7-Zip, non signe). Le SHA256 reste verifie.
+    $requireSignature = [bool](Get-AhuValue $manifest 'RequireSignature' $true)
+    if ($requireSignature -and $latest.SignatureStatus -and $latest.SignatureStatus -ne 'Valid') {
         throw ('{0}: signature invalide ({1}) pour {2}' -f $AppId, $latest.SignatureStatus, $latest.DownloadUrl)
     }
 
     $expectedSigner = [string](Get-AhuValue $manifest 'SignerSubject' '')
-    if ($expectedSigner -and $latest.Signer -notlike ('*{0}*' -f $expectedSigner)) {
+    if ($requireSignature -and $expectedSigner -and $latest.Signer -notlike ('*{0}*' -f $expectedSigner)) {
         throw ('{0}: signataire inattendu ({1}), attendu: {2}' -f $AppId, $latest.Signer, $expectedSigner)
     }
 
