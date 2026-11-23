@@ -166,7 +166,12 @@ Si une règle de protection de branche est active sur `main`, autoriser `github-
 
 ## Notifications
 
-- **Nouvelle version publiée** : `UpdateCatalog.yml` ouvre une issue GitHub, assignée au propriétaire du dépôt, avec la version, le lien vers le commit et une note sur l'application sur les postes. Tu reçois un courriel. Ferme l'issue une fois vue.
+- **Nouvelle version détectée** : `UpdateCatalog.yml` ouvre une **pull request** `Publier : <Application> <version>`, assignée au propriétaire du dépôt. Tu reçois un courriel.
+  - **Fusionner** la PR : la version est publiée, les postes l'appliquent au prochain cycle Intune si la remédiation est active.
+  - **Fermer sans fusionner** : la version est refusée, et elle n'est plus reproposée.
+  - La PR se ferme toute seule au merge : pas d'issue à fermer à la main.
+  - Les tests Pester tournent dans le workflow avant l'ouverture de la PR.
+  - Prérequis : dans **Paramètres > Actions > Général**, coche **Autoriser les actions GitHub à créer et approuver des pull requests**.
 - **Échec d'un workflow** : GitHub envoie un courriel par défaut. Vérifie les réglages dans **Paramètres de notifications**.
 - **Résultat sur les postes** : seulement dans le portail Intune (remédiation, sorties) et dans le journal local. Un poste ne peut pas envoyer d'alerte sans jeton, donc il n'y a pas de notification.
 

@@ -1,8 +1,8 @@
 name: Update catalog
 
 # Verifie les nouvelles versions des applications en mode Auto, met a jour leurs manifestes,
-# regenere catalog/apps.json et publie le tout en un seul commit.
-# Une issue est ouverte (assignee au proprietaire du depot) pour chaque mise a jour publiee.
+# regenere catalog/apps.json et ouvre une pull request par nouvelle version.
+# Fusionner la PR = publier la version aux postes. La fermer sans fusionner = refuser cette version.
 
 on:
   schedule:
@@ -17,6 +17,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: catalog-update
@@ -81,9 +82,21 @@ jobs:
           ./automation/Build-Catalog.ps1
           ./automation/Test-Catalog.ps1
 
-      - name: Commit
-        id: commit
+      # Les PR creees par GITHUB_TOKEN ne declenchent pas Validate.yml: les tests tournent donc ici.
+      - name: Tests Pester
         shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+      - name: Preparer la branche
+        id: branch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git add catalog
           git diff --cached --quiet
@@ -91,19 +104,37 @@ jobs:
             Write-Host 'Aucune nouvelle version.'
             exit 0
           }
-          $apps = git diff --cached --name-only -- catalog/applications | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_) }
+
+          $files = @(git diff --cached --name-only -- catalog/applications)
+          $entries = foreach ($file in $files) {
+            $m = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
+            [pscustomobject]@{ Id = $m.Id; Version = $m.Version; Url = $m.DownloadUrl }
+          }
+          $key = (@($entries | ForEach-Object { '{0}-{1}' -f $_.Id, $_.Version })) -join '_'
+          $branch = 'catalog/' + ($key.ToLowerInvariant() -replace '[^a-z0-9._-]', '-')
+
+          # Une version deja proposee (PR ouverte, fusionnee ou refusee) n'est pas reproposee.
+          $existing = [int](gh pr list --head $branch --state all --json number --jq 'length')
+          if ($existing -gt 0) {
+            Write-Host ('PR deja existante pour {0}, aucune nouvelle PR.' -f $branch)
+            exit 0
+          }
+
+          git checkout -b $branch
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m "catalog: mise a jour automatique ($($apps -join ', '))"
-          git push
+          git commit -m ('catalog: {0}' -f $key)
+          git push -u origin $branch
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "branch=$branch"
           Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value 'changed=true'
 
-      - name: Notifier par issue
-        if: steps.commit.outputs.changed == 'true'
+      - name: Ouvrir la pull request
+        if: steps.branch.outputs.changed == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           OWNER: ${{ github.repository_owner }}
+          BRANCH: ${{ steps.branch.outputs.branch }}
         run: |
           $sha = git rev-parse HEAD
           $entries = @()
@@ -113,13 +144,14 @@ jobs:
             $entries += [pscustomobject]@{ Id = $m.Id; Version = $m.Version; Url = $m.DownloadUrl }
           }
 
-          $title = 'Catalogue : ' + (($entries | ForEach-Object { '{0} {1}' -f $_.Id, $_.Version }) -join ', ')
-          $lines = @('Nouvelle version publiee au catalogue par GitHub Actions.', '')
+          $title = 'Publier : ' + (($entries | ForEach-Object { '{0} {1}' -f $_.Id, $_.Version }) -join ', ')
+          $lines = @('Nouvelle version detectee par GitHub Actions.', '')
           foreach ($e in $entries) { $lines += ('- **{0}** : version {1} ({2})' -f $e.Id, $e.Version, $e.Url) }
           $lines += ''
           $lines += ('Commit : https://github.com/{0}/commit/{1}' -f $env:GITHUB_REPOSITORY, $sha)
           $lines += ''
-          $lines += 'Les postes appliquent la mise a jour au prochain cycle Intune, si la remediation est active.'
+          $lines += '**Fusionner cette PR** pour publier la version. Les postes l''appliquent au prochain cycle Intune, si la remediation est active.'
+          $lines += '**Fermer cette PR sans fusionner** pour refuser cette version: elle ne sera plus reproposee.'
           Set-Content -LiteralPath body.md -Value ($lines -join "`n") -Encoding utf8
 
-          gh issue create --title $title --body-file body.md --assignee $env:OWNER
+          gh pr create --base main --head $env:BRANCH --title $title --body-file body.md --assignee $env:OWNER
