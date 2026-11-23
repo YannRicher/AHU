@@ -2,6 +2,7 @@ name: Update catalog
 
 # Verifie les nouvelles versions des applications en mode Auto, met a jour leurs manifestes,
 # regenere catalog/apps.json et publie le tout en un seul commit.
+# Une issue est ouverte (assignee au proprietaire du depot) pour chaque mise a jour publiee.
 
 on:
   schedule:
@@ -15,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: catalog-update
@@ -80,6 +82,7 @@ jobs:
           ./automation/Test-Catalog.ps1
 
       - name: Commit
+        id: commit
         shell: pwsh
         run: |
           git add catalog
@@ -93,3 +96,30 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m "catalog: mise a jour automatique ($($apps -join ', '))"
           git push
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value 'changed=true'
+
+      - name: Notifier par issue
+        if: steps.commit.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          $sha = git rev-parse HEAD
+          $entries = @()
+          foreach ($file in @(git show --name-only --format= HEAD -- catalog/applications)) {
+            if (-not $file) { continue }
+            $m = Get-Content -Raw -LiteralPath $file | ConvertFrom-Json
+            $entries += [pscustomobject]@{ Id = $m.Id; Version = $m.Version; Url = $m.DownloadUrl }
+          }
+
+          $title = 'Catalogue : ' + (($entries | ForEach-Object { '{0} {1}' -f $_.Id, $_.Version }) -join ', ')
+          $lines = @('Nouvelle version publiee au catalogue par GitHub Actions.', '')
+          foreach ($e in $entries) { $lines += ('- **{0}** : version {1} ({2})' -f $e.Id, $e.Version, $e.Url) }
+          $lines += ''
+          $lines += ('Commit : https://github.com/{0}/commit/{1}' -f $env:GITHUB_REPOSITORY, $sha)
+          $lines += ''
+          $lines += 'Les postes appliquent la mise a jour au prochain cycle Intune, si la remediation est active.'
+          Set-Content -LiteralPath body.md -Value ($lines -join "`n") -Encoding utf8
+
+          gh issue create --title $title --body-file body.md --assignee $env:OWNER

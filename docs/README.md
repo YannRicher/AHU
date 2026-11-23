@@ -164,6 +164,12 @@ Les journaux MSI détaillés sont écrits dans `C:\ProgramData\AHU\Logs\<Id>-<ve
 
 Si une règle de protection de branche est active sur `main`, autoriser `github-actions[bot]` à pousser, ou adapter le workflow pour ouvrir une pull request.
 
+## Notifications
+
+- **Nouvelle version publiée** : `UpdateCatalog.yml` ouvre une issue GitHub, assignée au propriétaire du dépôt, avec la version, le lien vers le commit et une note sur l'application sur les postes. Tu reçois un courriel. Ferme l'issue une fois vue.
+- **Échec d'un workflow** : GitHub envoie un courriel par défaut. Vérifie les réglages dans **Paramètres de notifications**.
+- **Résultat sur les postes** : seulement dans le portail Intune (remédiation, sorties) et dans le journal local. Un poste ne peut pas envoyer d'alerte sans jeton, donc il n'y a pas de notification.
+
 ## Ajouter une application
 
 **Pinned** (Adobe Reader, MATLAB…) :
