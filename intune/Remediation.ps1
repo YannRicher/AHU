@@ -854,6 +854,70 @@ function Uninstall-AhuUserInstall {
     }
 }
 
+function Remove-AhuStaleCache {
+    <#
+        Supprime les dossiers de cache d'une application qui ne correspondent pas a la version cible.
+        Exemple: un MSI 7.1 reste apres un echec, puis la cible passe a 7.2 => le dossier 7.1 est supprime.
+        Le dossier de la version cible est conserve pour reprendre sans retelecharger.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AppId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetVersion,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DataRoot
+    )
+
+    $appCache = Join-Path $DataRoot ('Cache\{0}' -f $AppId)
+    if (-not (Test-Path -LiteralPath $appCache)) { return 0 }
+
+    $removed = 0
+    foreach ($directory in @(Get-ChildItem -LiteralPath $appCache -Directory)) {
+        if ($directory.Name -eq $TargetVersion) { continue }
+        Remove-Item -LiteralPath $directory.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $directory.FullName)) { $removed++ }
+    }
+    return $removed
+}
+
+function Remove-AhuOldMsiLog {
+    <#
+        Ne garde que les $Keep journaux MSI les plus recents par application.
+        Fichiers attendus: <Id>-<version>-msi.log
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LogDirectory,
+
+        [int]$Keep = 2
+    )
+
+    if (-not (Test-Path -LiteralPath $LogDirectory)) { return 0 }
+
+    $removed = 0
+    $files = @(Get-ChildItem -LiteralPath $LogDirectory -Filter '*-msi.log' -File)
+    $groups = $files | Group-Object -Property {
+        $m = [regex]::Match($_.Name, '^(.+)-[^-]+-msi\.log$')
+        if ($m.Success) { $m.Groups[1].Value } else { $_.Name }
+    }
+
+    foreach ($group in $groups) {
+        $old = @($group.Group | Sort-Object -Property LastWriteTime -Descending | Select-Object -Skip $Keep)
+        foreach ($file in $old) {
+            Remove-Item -LiteralPath $file.FullName -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path -LiteralPath $file.FullName)) { $removed++ }
+        }
+    }
+    return $removed
+}
+
 function Install-AhuApp {
     <#
         Telecharge, verifie (SHA256 + signature Authenticode) et installe silencieusement une application du catalogue.
@@ -890,6 +954,11 @@ function Install-AhuApp {
     $appCache = Join-Path $DataRoot ('Cache\{0}' -f $id)
     $installer = Join-Path (Join-Path $appCache $version) (Get-AhuInstallerFileName -App $App)
     $expectedHash = [string](Get-AhuValue $App 'Sha256' '')
+
+    $staleCache = Remove-AhuStaleCache -AppId $id -TargetVersion $version -DataRoot $DataRoot
+    if ($staleCache -gt 0) {
+        Write-AhuLog ('{0}: {1} ancien(s) dossier(s) de cache supprime(s)' -f $id, $staleCache)
+    }
 
     try {
         # 2. Telechargement (reutilise le cache si le hash correspond)
@@ -935,7 +1004,10 @@ function Install-AhuApp {
         # 4. Installation
         $installArguments = [string](Get-AhuValue $App 'InstallArguments' '')
         if ($type -eq 'MSI') {
-            $msiLog = Join-Path (Join-Path $DataRoot 'Logs') ('{0}-{1}-msi.log' -f $id, $version)
+            $logDirectory = Join-Path $DataRoot 'Logs'
+            # 2 anciens journaux conserves + le nouveau = 3 au maximum par application
+            [void](Remove-AhuOldMsiLog -LogDirectory $logDirectory -Keep 2)
+            $msiLog = Join-Path $logDirectory ('{0}-{1}-msi.log' -f $id, $version)
             $filePath = Join-Path $env:SystemRoot 'System32\msiexec.exe'
             $arguments = ('/i "{0}" {1} /L*v "{2}"' -f $installer, $installArguments, $msiLog).Trim()
         }
