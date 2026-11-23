@@ -86,3 +86,68 @@ Describe 'Remove-AhuOldMsiLog' {
         Remove-AhuOldMsiLog -LogDirectory (Join-Path $logDirectory 'absent') -Keep 2 | Should -Be 0
     }
 }
+
+Describe 'Choix de la langue d''installation' {
+    BeforeAll {
+        $script:reader = [pscustomobject]@{
+            Id               = 'AdobeReader'
+            Mode             = 'Auto'
+            Version          = '25.001.20531'
+            DownloadUrl      = 'https://example.com/default-en.exe'
+            Sha256           = ''
+            InstallerType    = 'EXE'
+            InstallArguments = '/sAll'
+            DetectionName    = @('Adobe Acrobat Reader*')
+            Installers       = @(
+                [pscustomobject]@{ Locale = 'fr-CA'; DownloadUrl = 'https://example.com/fr-ca.exe' }
+                [pscustomobject]@{ Locale = 'fr-FR'; DownloadUrl = 'https://example.com/fr-fr.exe' }
+                [pscustomobject]@{ Locale = 'en-US'; DownloadUrl = 'https://example.com/en-us.exe' }
+            )
+        }
+    }
+
+    It 'ordre: langue systeme, puis fr-CA, fr-FR, en-US (sans doublon)' {
+        (Get-AhuLanguageOrder -SystemLocale 'de-DE') -join ',' | Should -Be 'de-DE,fr-CA,fr-FR,en-US'
+        (Get-AhuLanguageOrder -SystemLocale 'fr-FR') -join ',' | Should -Be 'fr-FR,fr-CA,en-US'
+    }
+
+    It 'prend la langue du systeme si un installateur existe' {
+        $r = Select-AhuInstallerVariant -App $reader -LanguageOrder @('fr-FR', 'fr-CA', 'en-US')
+        $r.DownloadUrl | Should -Be 'https://example.com/fr-fr.exe'
+        $r.SelectedLocale | Should -Be 'fr-FR'
+    }
+
+    It 'sinon fr-CA avant fr-FR et en-US' {
+        $r = Select-AhuInstallerVariant -App $reader -LanguageOrder @('de-DE', 'fr-CA', 'fr-FR', 'en-US')
+        $r.DownloadUrl | Should -Be 'https://example.com/fr-ca.exe'
+    }
+
+    It 'en-US en dernier recours' {
+        $onlyEnglish = [pscustomobject]@{
+            Id = 'X'; DownloadUrl = 'https://example.com/default.exe'; InstallerType = 'EXE'; Installers = @([pscustomobject]@{ Locale = 'en-US'; DownloadUrl = 'https://example.com/en.exe' })
+        }
+        (Select-AhuInstallerVariant -App $onlyEnglish -LanguageOrder @('de-DE', 'fr-CA', 'fr-FR', 'en-US')).DownloadUrl | Should -Be 'https://example.com/en.exe'
+    }
+
+    It 'sans installateur par langue, ou sans correspondance: installateur par defaut' {
+        $plain = [pscustomobject]@{ Id = 'Zoom'; DownloadUrl = 'https://example.com/zoom.msi'; InstallerType = 'MSI' }
+        (Select-AhuInstallerVariant -App $plain -LanguageOrder @('fr-CA')).DownloadUrl | Should -Be 'https://example.com/zoom.msi'
+
+        $none = [pscustomobject]@{ Id = 'X'; DownloadUrl = 'https://example.com/default.exe'; InstallerType = 'EXE'; Installers = @([pscustomobject]@{ Locale = 'de-DE'; DownloadUrl = 'https://example.com/de.exe' }) }
+        (Select-AhuInstallerVariant -App $none -LanguageOrder @('fr-CA', 'en-US')).DownloadUrl | Should -Be 'https://example.com/default.exe'
+    }
+
+    It 'ne modifie pas l''application d''origine' {
+        Select-AhuInstallerVariant -App $reader -LanguageOrder @('fr-CA') | Out-Null
+        $reader.DownloadUrl | Should -Be 'https://example.com/default-en.exe'
+    }
+
+    It 'refuse un Locale invalide et un DownloadUrl non https' {
+        $bad = $reader.PSObject.Copy()
+        $bad | Add-Member -NotePropertyName Installers -NotePropertyValue @(
+            [pscustomobject]@{ Locale = 'french'; DownloadUrl = 'https://example.com/a.exe' }
+            [pscustomobject]@{ Locale = 'fr-CA'; DownloadUrl = 'http://example.com/b.exe' }
+        ) -Force
+        @(Test-AhuAppDefinition -App $bad).Count | Should -Be 2
+    }
+}

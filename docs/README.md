@@ -107,6 +107,7 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 | `Sha256` | recommandé | Vérifié avant l'installation. |
 | `InstallerType` | Auto/Pinned | `MSI` (`msiexec /i … /L*v`) ou `EXE`. |
 | `InstallArguments` | non | Arguments silencieux. |
+| `Installers` | non | Installateurs par langue : `[{ "Locale": "fr-CA", "DownloadUrl": "...", "Sha256": "...", "InstallerType": "EXE", "InstallArguments": "..." }]`. Ordre de choix : langue du système (lue sous SYSTEM), puis fr-CA, fr-FR, en-US. Sans correspondance, les champs du haut sont utilisés. Les champs absents d'une variante reprennent ceux du haut. |
 | `InstallIfMissing` | non | `false` par défaut : mise à jour seulement. |
 | `ReplaceUserInstall` | non | Avant l'installation machine, désinstalle les copies par utilisateur détectées (Zoom personnel dans `%AppData%`). |
 | `ConflictingProcesses` | non | Processus qui empêchent l'installation (ex. réunion Zoom en cours). |

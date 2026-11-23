@@ -270,6 +270,56 @@ function Remove-AhuOldMsiLog {
     return $removed
 }
 
+function Get-AhuLanguageOrder {
+    <#
+        Ordre de preference des langues d'installation:
+          1. langue du systeme (UI du systeme, lue sous SYSTEM)
+          2. fr-CA, 3. fr-FR, 4. en-US
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [string]$SystemLocale = [System.Globalization.CultureInfo]::InstalledUICulture.Name
+    )
+
+    $fallback = @('fr-CA', 'fr-FR', 'en-US')
+    @($SystemLocale) + $fallback | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+}
+
+function Select-AhuInstallerVariant {
+    <#
+        Si l'application a des installateurs par langue (Installers), retourne une copie avec
+        DownloadUrl, Sha256, InstallerType et InstallArguments de la langue retenue.
+        Sinon, retourne l'application telle quelle (installateur par defaut).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        $App,
+
+        [string[]]$LanguageOrder = (Get-AhuLanguageOrder)
+    )
+
+    $variants = @(Get-AhuValue $App 'Installers' @())
+    if ($variants.Count -eq 0) { return $App }
+
+    foreach ($locale in $LanguageOrder) {
+        $match = $variants | Where-Object { [string]$_.Locale -eq $locale } | Select-Object -First 1
+        if (-not $match) { continue }
+
+        $resolved = $App.PSObject.Copy()
+        foreach ($name in 'DownloadUrl', 'Sha256', 'InstallerType', 'InstallArguments') {
+            if ($match.PSObject.Properties[$name]) {
+                $resolved | Add-Member -NotePropertyName $name -NotePropertyValue $match.$name -Force
+            }
+        }
+        $resolved | Add-Member -NotePropertyName 'SelectedLocale' -NotePropertyValue $locale -Force
+        return $resolved
+    }
+
+    return $App
+}
+
 function Install-AhuApp {
     <#
         Telecharge, verifie (SHA256 + signature Authenticode) et installe silencieusement une application du catalogue.
@@ -282,7 +332,11 @@ function Install-AhuApp {
         [string]$DataRoot = (Join-Path $env:ProgramData 'AHU')
     )
 
+    $App = Select-AhuInstallerVariant -App $App
     $id = $App.Id
+    if ($App.PSObject.Properties['SelectedLocale']) {
+        Write-AhuLog ('{0}: installateur {1} retenu (langue systeme {2})' -f $id, $App.SelectedLocale, [System.Globalization.CultureInfo]::InstalledUICulture.Name)
+    }
     $version = [string](Get-AhuValue $App 'Version' '')
     $type = ([string](Get-AhuValue $App 'InstallerType' '')).ToUpperInvariant()
     $url = [string](Get-AhuValue $App 'DownloadUrl' '')
@@ -401,4 +455,4 @@ function Install-AhuApp {
     }
 }
 
-Export-ModuleMember -Function New-AhuInstallResult, Save-AhuFile, Get-AhuInstallerFileName, Get-AhuConflictingProcess, Invoke-AhuProcess, Split-AhuUninstallCommand, Uninstall-AhuUserInstall, Remove-AhuStaleCache, Remove-AhuOldMsiLog, Install-AhuApp
+Export-ModuleMember -Function New-AhuInstallResult, Save-AhuFile, Get-AhuInstallerFileName, Get-AhuConflictingProcess, Invoke-AhuProcess, Split-AhuUninstallCommand, Uninstall-AhuUserInstall, Remove-AhuStaleCache, Remove-AhuOldMsiLog, Get-AhuLanguageOrder, Select-AhuInstallerVariant, Install-AhuApp

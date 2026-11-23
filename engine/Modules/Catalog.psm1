@@ -114,6 +114,21 @@ function Test-AhuAppDefinition {
             'Sha256 invalide (64 caracteres hexadecimaux attendus)'
         }
     }
+
+    $installers = @(Get-AhuValue $App 'Installers' @())
+    foreach ($variant in $installers) {
+        $locale = [string](Get-AhuValue $variant 'Locale' '')
+        if ($locale -notmatch '^[a-z]{2}-[A-Z]{2}$') {
+            "Installers: Locale invalide '{0}' (format attendu: fr-CA)" -f $locale
+        }
+        if ([string](Get-AhuValue $variant 'DownloadUrl' '') -notmatch '^https://') {
+            "Installers ({0}): DownloadUrl doit etre une URL https" -f $locale
+        }
+        $variantHash = [string](Get-AhuValue $variant 'Sha256' '')
+        if ($variantHash -and $variantHash -notmatch '^[0-9a-fA-F]{64}$') {
+            "Installers ({0}): Sha256 invalide" -f $locale
+        }
+    }
 }
 
 function ConvertFrom-AhuCatalogJson {
