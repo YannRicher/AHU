@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Valide les manifestes et le catalogue publie. Code de sortie 1 si une erreur est trouvee.
+    Valide les manifestes et les deux catalogues publies (pilote et production). Code de sortie 1 si erreur.
 #>
 [CmdletBinding()]
 param(
@@ -38,6 +38,14 @@ foreach ($item in Get-AhuManifest -CatalogRoot $CatalogRoot) {
         $errors.Add(('{0}: {1}' -f $file, $message))
     }
 
+    $production = Get-AhuValue $manifest 'Production'
+    if ($production) {
+        $definition = [pscustomobject]@{ Id = $id; Mode = $manifest.Mode; Version = $production.Version; DownloadUrl = $production.DownloadUrl; Sha256 = (Get-AhuValue $production 'Sha256' ''); InstallerType = $manifest.InstallerType; DetectionName = $manifest.DetectionName }
+        foreach ($message in Test-AhuAppDefinition -App $definition) {
+            $errors.Add(('{0} (Production): {1}' -f $file, $message))
+        }
+    }
+
     $updater = Get-AhuValue $manifest 'Updater'
     if ($updater) {
         $type = [string](Get-AhuValue $updater 'Type' '')
@@ -50,17 +58,22 @@ foreach ($item in Get-AhuManifest -CatalogRoot $CatalogRoot) {
     }
 }
 
-$published = Join-Path $CatalogRoot 'apps.json'
-try {
-    $catalog = ConvertFrom-AhuCatalogJson -Json (Get-Content -LiteralPath $published -Raw -Encoding utf8)
-    foreach ($property in $catalog.Applications.PSObject.Properties) {
-        if (-not $ids.ContainsKey($property.Name)) {
-            $errors.Add(('apps.json: {0} n''a pas de manifeste (executer Build-Catalog.ps1)' -f $property.Name))
+foreach ($name in 'apps.pilot.json', 'apps.json') {
+    $published = Join-Path $CatalogRoot $name
+    try {
+        $catalog = ConvertFrom-AhuCatalogJson -Json (Get-Content -LiteralPath $published -Raw -Encoding utf8)
+        foreach ($property in $catalog.Applications.PSObject.Properties) {
+            if (-not $ids.ContainsKey($property.Name)) {
+                $errors.Add(('{0}: {1} n''a pas de manifeste (executer Build-Catalog.ps1)' -f $name, $property.Name))
+            }
+            foreach ($message in Test-AhuAppDefinition -App $property.Value) {
+                $errors.Add(('{0}: {1}: {2}' -f $name, $property.Name, $message))
+            }
         }
     }
-}
-catch {
-    $errors.Add(('apps.json invalide: {0}' -f $_.Exception.Message))
+    catch {
+        $errors.Add(('{0} invalide: {1}' -f $name, $_.Exception.Message))
+    }
 }
 
 if ($errors.Count -gt 0) {
@@ -68,4 +81,4 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host ('Catalogue valide ({0} application(s)).' -f $ids.Count) -ForegroundColor Green
+Write-Host ('Catalogues valides ({0} application(s) dans les manifestes).' -f $ids.Count) -ForegroundColor Green

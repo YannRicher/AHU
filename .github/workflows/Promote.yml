@@ -1,0 +1,83 @@
+name: Promouvoir en production
+
+# Copie la version pilote d'une application vers la production et ouvre une pull request.
+# Fusionner la PR = la version part sur le parc (anneau production). Fermer sans fusionner = pas de promotion.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Id de l'application a promouvoir (ex. Zoom)"
+        required: true
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: catalog-update
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Promouvoir dans le manifeste
+        id: promote
+        shell: pwsh
+        env:
+          APP_ID: ${{ inputs.app }}
+        run: ./automation/Promote-App.ps1 -AppId $env:APP_ID
+
+      - name: Generer et valider les catalogues
+        if: steps.promote.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          ./automation/Build-Catalog.ps1
+          ./automation/Test-Catalog.ps1
+
+      - name: Tests Pester
+        if: steps.promote.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser -SkipPublisherCheck
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+      - name: Ouvrir la pull request
+        if: steps.promote.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          APP_ID: ${{ inputs.app }}
+          VERSION: ${{ steps.promote.outputs.version }}
+        run: |
+          $branch = ('promote/{0}-{1}' -f $env:APP_ID, $env:VERSION).ToLowerInvariant() -replace '[^a-z0-9._/-]', '-'
+
+          $existing = [int](gh pr list --head $branch --state all --json number --jq 'length')
+          if ($existing -gt 0) {
+            Write-Host ('PR deja existante pour {0}, aucune nouvelle PR.' -f $branch)
+            exit 0
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b $branch
+          git add catalog
+          git commit -m ('promotion en production: {0} {1}' -f $env:APP_ID, $env:VERSION)
+          git push -u origin $branch
+
+          $lines = @(
+            ('Promotion de **{0}** version **{1}** vers la production.' -f $env:APP_ID, $env:VERSION),
+            '',
+            '**Fusionner cette PR** pour publier la version sur le parc (au prochain cycle Intune, si la remediation est active).',
+            '**Fermer sans fusionner** pour ne pas promouvoir cette version.'
+          )
+          Set-Content -LiteralPath body.md -Value ($lines -join "`n") -Encoding utf8
+          gh pr create --base main --head $branch --title ('Promouvoir en production : {0} {1}' -f $env:APP_ID, $env:VERSION) --body-file body.md --assignee $env:OWNER

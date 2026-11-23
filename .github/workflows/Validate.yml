@@ -39,7 +39,7 @@ jobs:
           $config.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $config
 
-      - name: Validation du catalogue
+      - name: Validation des catalogues
         shell: pwsh
         run: ./automation/Test-Catalog.ps1
 
@@ -48,7 +48,7 @@ jobs:
         run: |
           ./automation/Build-Catalog.ps1
           ./automation/Build-IntuneScripts.ps1
-          git diff --exit-code -- catalog/apps.json intune/
+          git diff --exit-code -- catalog/apps.json catalog/apps.pilot.json intune/
           if ($LASTEXITCODE -ne 0) {
-            throw 'apps.json ou intune/*.ps1 ne sont pas a jour: executer automation/Build-Catalog.ps1 et automation/Build-IntuneScripts.ps1'
+            throw 'catalog/apps*.json ou intune/*.ps1 ne sont pas a jour: executer automation/Build-Catalog.ps1 et automation/Build-IntuneScripts.ps1'
           }

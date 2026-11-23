@@ -123,6 +123,32 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 
 `catalog/settings.json` contient `"Paused": true|false`. C'est un interrupteur global : à `true`, tous les postes cessent d'installer quoi que ce soit.
 
+## Anneaux : pilote et production
+
+Chaque application a deux versions publiées, selon l'anneau :
+
+| Fichier publié | Anneau | Contenu |
+|---|---|---|
+| `catalog/apps.pilot.json` | **Pilote** | Champs de premier niveau du manifeste (`Version`, `DownloadUrl`, `Sha256`). Mis à jour par le bot, via une PR par version. |
+| `catalog/apps.json` | **Production** | Bloc `Production` du manifeste (`Version`, `DownloadUrl`, `Sha256`). Modifié seulement par une promotion explicite. |
+
+Règles de publication (`automation/Build-Catalog.ps1`) :
+
+- Une application `Auto` ou `Pinned` **sans** bloc `Production` n'apparaît que dans le pilote (avertissement affiché).
+- Une application `Manual` (inventaire) apparaît dans les deux anneaux.
+- Les blocs `Production` et `Updater` ne sont jamais publiés aux postes.
+
+**Promouvoir une version en production** : quand la version pilote a tourné sans problème, lance le workflow **Promouvoir** (`Actions > Promouvoir > Run workflow`, champ `app` = `Zoom`). Il ouvre une PR `Promouvoir en production : Zoom <version>`. Fusionne-la pour que la production reçoive la version. Si la version pilote est déjà en production, le workflow ne fait rien.
+
+Pour promouvoir en local : `pwsh ./automation/Promote-App.ps1 -AppId Zoom`, puis `pwsh ./automation/Build-Catalog.ps1`.
+
+**Intune : deux remédiations**
+
+1. **AHU - Pilote** : scripts `intune/Detection-Pilote.ps1` et `intune/Remediation-Pilote.ps1`, affectés au **groupe pilote**.
+2. **AHU - Production** : scripts `intune/Detection.ps1` et `intune/Remediation.ps1`, affectés au **reste des postes**. **Exclure le groupe pilote** de cette remédiation, sinon le même poste exécute les deux (le résultat est le même, mais c'est inutile et ça double les journaux).
+
+Ces scripts sont régénérés par `automation/Build-IntuneScripts.ps1`. Si le moteur change, re-téléverse les quatre scripts.
+
 ## Déploiement Intune
 
 1. Le dépôt doit être **public** (les postes lisent `https://raw.githubusercontent.com/YannRicher/AHU/main/catalog/apps.json` sans authentification). Ne jamais mettre de jeton dans un script de remédiation.
@@ -209,5 +235,5 @@ Pour reproduire exactement le contexte Intune (SYSTEM) : `psexec -s -i powershel
 
 - Installations **machine** seulement (HKLM). Les installations par utilisateur, fréquentes avec Zoom, ne sont pas visées.
 - Pas de rétrogradation : un poste en version plus récente qu'une version `Pinned` est déclaré conforme.
-- Pas encore d'anneaux de déploiement (pilote / production) ni de délai d'approbation (voir `ARCHITECTURE.md`).
+- Anneaux pilote / production en place, sans délai automatique entre les deux : la promotion est manuelle (voir `ARCHITECTURE.md`).
 - `ConflictAction: Skip` : si Zoom reste ouvert en permanence, la mise à jour se fera quand Zoom sera fermé (soir, redémarrage). Utiliser `Kill` pour forcer.

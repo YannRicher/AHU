@@ -5,6 +5,11 @@
   "Version": "7.2.51704",
   "DownloadUrl": "https://cdn.zoom.us/prod/7.2.5.51704/x64/ZoomInstallerFull.msi",
   "Sha256": "8E81E0D7DC401880C4CDFD14DB8BED51308608B7AA67FA1E2CA31CCAA71CAD93",
+  "Production": {
+    "Version": "7.2.51704",
+    "DownloadUrl": "https://cdn.zoom.us/prod/7.2.5.51704/x64/ZoomInstallerFull.msi",
+    "Sha256": "8E81E0D7DC401880C4CDFD14DB8BED51308608B7AA67FA1E2CA31CCAA71CAD93"
+  },
   "InstallerType": "MSI",
   "InstallArguments": "/qn /norestart",
   "DetectionName": [

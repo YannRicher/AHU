@@ -1,5 +1,5 @@
 <#
-    AHU - Remediation: telecharge et installe les mises a jour requises
+    AHU - Remediation: telecharge et installe les mises a jour requises - anneau Production
 
     FICHIER GENERE par automation/Build-IntuneScripts.ps1 - ne pas modifier directement.
     Source: engine/Modules/*.psm1 - https://github.com/YannRicher/AHU

@@ -25,19 +25,36 @@ Describe 'Scripts executes sur les postes' {
     }
 }
 
-Describe 'Catalogue publie' {
-    It 'apps.json est valide pour le moteur' {
+Describe 'Catalogues publies' {
+    BeforeAll {
         foreach ($module in 'Logging', 'Version', 'Catalog') {
             Import-Module (Join-Path $root ('engine\Modules\{0}.psm1' -f $module)) -Force -Global -DisableNameChecking
         }
-        $json = [System.IO.File]::ReadAllText((Join-Path $root 'catalog\apps.json'))
+    }
+
+    It '<Name> est valide pour le moteur' -TestCases @(
+        @{ Name = 'apps.json (production)';   File = 'apps.json' }
+        @{ Name = 'apps.pilot.json (pilote)'; File = 'apps.pilot.json' }
+    ) {
+        $json = [System.IO.File]::ReadAllText((Join-Path $root ('catalog\{0}' -f $File)))
         $catalog = ConvertFrom-AhuCatalogJson -Json $json
         foreach ($property in $catalog.Applications.PSObject.Properties) {
             @(Test-AhuAppDefinition -App $property.Value) | Should -BeNullOrEmpty -Because $property.Name
         }
     }
 
-    It 'les scripts Intune pointent vers le catalogue GitHub' {
-        Get-Content -LiteralPath (Join-Path $root 'intune\Detection.ps1') -Raw | Should -Match 'raw\.githubusercontent\.com/YannRicher/AHU/main/catalog/apps\.json'
+    It 'les catalogues ne publient jamais le bloc Production ni Updater' {
+        foreach ($file in 'apps.json', 'apps.pilot.json') {
+            $text = [System.IO.File]::ReadAllText((Join-Path $root ('catalog\{0}' -f $file)))
+            $text | Should -Not -Match '"Production"'
+            $text | Should -Not -Match '"Updater"'
+        }
+    }
+
+    It 'les scripts Intune pilote et production pointent vers le bon catalogue' {
+        Get-Content -LiteralPath (Join-Path $root 'intune\Detection.ps1') -Raw | Should -Match 'catalog/apps\.json'
+        Get-Content -LiteralPath (Join-Path $root 'intune\Remediation.ps1') -Raw | Should -Match 'catalog/apps\.json'
+        Get-Content -LiteralPath (Join-Path $root 'intune\Detection-Pilote.ps1') -Raw | Should -Match 'catalog/apps\.pilot\.json'
+        Get-Content -LiteralPath (Join-Path $root 'intune\Remediation-Pilote.ps1') -Raw | Should -Match 'catalog/apps\.pilot\.json'
     }
 }

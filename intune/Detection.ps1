@@ -1,5 +1,5 @@
 <#
-    AHU - Detection: code 0 = conforme, 1 = remediation requise
+    AHU - Detection: code 0 = conforme, 1 = remediation requise - anneau Production
 
     FICHIER GENERE par automation/Build-IntuneScripts.ps1 - ne pas modifier directement.
     Source: engine/Modules/*.psm1 - https://github.com/YannRicher/AHU
