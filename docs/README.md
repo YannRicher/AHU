@@ -29,6 +29,7 @@ AHU
 │   └── applications               # SOURCE DE VÉRITÉ – un fichier par application
 │       ├── zoom.json
 │       ├── 7-zip.json
+│       ├── sharex.json
 │       ├── adobereader.json
 │       ├── java.json
 │       └── vscode.json

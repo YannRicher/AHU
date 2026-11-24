@@ -1,0 +1,25 @@
+{
+  "Id": "ShareX",
+  "Name": "ShareX",
+  "Mode": "Auto",
+  "Version": "22.4.0",
+  "DownloadUrl": "https://github.com/ShareX/ShareX/releases/download/v22.4.0/ShareX-22.4.0-setup-x64.exe",
+  "Sha256": "5FAC6EE58600976586D706F164B0F8A992FFF7679BF2724A1F678C4A63894A8E",
+  "InstallerType": "EXE",
+  "InstallArguments": "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
+  "DetectionName": [
+    "ShareX*"
+  ],
+  "InstallIfMissing": false,
+  "ConflictingProcesses": [
+    "ShareX"
+  ],
+  "ConflictAction": "Skip",
+  "SignerSubject": "Ember Swan",
+  "Updater": {
+    "Type": "GitHubRelease",
+    "Repo": "ShareX/ShareX",
+    "AssetPattern": "ShareX-*-setup-x64.exe"
+  },
+  "LastUpdated": "2026-11-24"
+}
