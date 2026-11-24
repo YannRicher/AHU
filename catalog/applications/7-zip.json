@@ -24,5 +24,10 @@
     "Repo": "ip7z/7zip",
     "AssetPattern": "7z*-x64.exe"
   },
-  "LastUpdated": "2026-11-23"
+  "LastUpdated": "2026-11-23",
+  "Production": {
+    "Version": "26.06",
+    "DownloadUrl": "https://github.com/ip7z/7zip/releases/download/26.06/7z2606-x64.exe",
+    "Sha256": "9B697F65ECC2D9B0152F5EE96D72DDE522A7827690349D9307935DACF40F42EC"
+  }
 }
