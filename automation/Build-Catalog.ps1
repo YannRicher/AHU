@@ -12,13 +12,17 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$CatalogRoot = (Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'catalog')
+    [string]$CatalogRoot = (Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'catalog'),
+
+    # Adresse publique des scripts avant/apres (catalog/hooks/<Id>/PreInstall.ps1 et PostInstall.ps1)
+    [string]$HooksBaseUrl = 'https://raw.githubusercontent.com/YannRicher/AHU/main/catalog/hooks'
 )
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'AhuAutomation.psm1') -Force -Global -DisableNameChecking
 
-$excluded = @('Id', 'Updater', 'Production')
+# PreInstall / PostInstall viennent uniquement des fichiers catalog/hooks (jamais du manifeste)
+$excluded = @('Id', 'Updater', 'Production', 'PreInstall', 'PostInstall')
 $productionFields = @('Version', 'DownloadUrl', 'Sha256')
 
 function ConvertTo-AhuDefinition {
@@ -49,7 +53,19 @@ foreach ($item in (Get-AhuManifest -CatalogRoot $CatalogRoot | Sort-Object { $_.
     if ($seen.ContainsKey($id)) { throw ('Id en double: {0}' -f $id) }
     $seen[$id] = $true
 
-    $pilot[$id] = ConvertTo-AhuDefinition -Manifest $manifest
+    # Scripts avant/apres: identiques pour les deux anneaux (un seul fichier dans le depot)
+    $hookOverrides = @{}
+    foreach ($phase in 'PreInstall', 'PostInstall') {
+        $hookPath = Join-Path $CatalogRoot ('hooks\{0}\{1}.ps1' -f $id, $phase)
+        if (Test-Path -LiteralPath $hookPath) {
+            $hookOverrides[$phase] = [ordered]@{
+                Url    = ('{0}/{1}/{2}.ps1' -f $HooksBaseUrl.TrimEnd('/'), $id, $phase)
+                Sha256 = Get-AhuHookHash -Path $hookPath
+            }
+        }
+    }
+
+    $pilot[$id] = ConvertTo-AhuDefinition -Manifest $manifest -Overrides $hookOverrides
 
     $productionBlock = Get-AhuValue $manifest 'Production'
     if ($productionBlock) {
@@ -57,10 +73,11 @@ foreach ($item in (Get-AhuManifest -CatalogRoot $CatalogRoot | Sort-Object { $_.
         foreach ($field in $productionFields) {
             if ($productionBlock.PSObject.Properties[$field]) { $overrides[$field] = $productionBlock.$field }
         }
+        foreach ($phase in $hookOverrides.Keys) { $overrides[$phase] = $hookOverrides[$phase] }
         $production[$id] = ConvertTo-AhuDefinition -Manifest $manifest -Overrides $overrides
     }
     elseif ([string]$manifest.Mode -eq 'Manual') {
-        $production[$id] = ConvertTo-AhuDefinition -Manifest $manifest
+        $production[$id] = ConvertTo-AhuDefinition -Manifest $manifest -Overrides $hookOverrides
     }
     else {
         Write-Host ('{0}: pas de bloc Production, absente de apps.json (pilote seulement)' -f $id) -ForegroundColor Yellow

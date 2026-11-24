@@ -14,7 +14,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Path $PSScriptRoot -Parent
-$modules = 'Logging', 'Version', 'Catalog', 'Detection', 'Installer', 'Engine'
+$modules = 'Logging', 'Version', 'Catalog', 'Detection', 'Hooks', 'Installer', 'Engine'
 $baseUrl = 'https://raw.githubusercontent.com/YannRicher/AHU/main/catalog'
 
 $body = New-Object System.Collections.Generic.List[string]

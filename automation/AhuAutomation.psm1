@@ -239,4 +239,54 @@ function Add-AhuStepSummary {
     }
 }
 
-Export-ModuleMember -Function Get-AhuRepoRoot, Read-AhuJson, Write-AhuJson, Get-AhuManifest, Set-AhuProperty, Resolve-AhuRedirect, Get-AhuMsiProperty, Get-AhuInstallerInfo, Save-AhuDownload, Set-AhuActionOutput, Add-AhuStepSummary
+function Get-AhuHookHash {
+    <#
+        SHA256 d'un script avant/apres tel que GitHub le sert aux postes.
+        Le depot stocke les .ps1 de catalog/hooks en LF (voir .gitattributes): on normalise donc CRLF -> LF
+        avant de calculer le hash, pour qu'une copie de travail en CRLF donne le meme resultat.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+    $text = $latin1.GetString([System.IO.File]::ReadAllBytes($Path)) -replace "`r`n", "`n"
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($latin1.GetBytes($text))
+    }
+    finally {
+        $sha.Dispose()
+    }
+    (($hash | ForEach-Object { $_.ToString('X2') }) -join '')
+}
+
+function Get-AhuHookError {
+    <#
+        Erreurs d'un script avant/apres (liste vide si valide): syntaxe PowerShell et encodage.
+        Windows PowerShell 5.1 lit un fichier UTF-8 sans BOM comme de l'ANSI: ASCII pur ou UTF-8 avec BOM.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    if (-not $hasBom -and @($bytes | Where-Object { $_ -gt 127 }).Count -gt 0) {
+        'caracteres non ASCII sans BOM UTF-8 (Windows PowerShell 5.1 les lirait en ANSI)'
+    }
+
+    $tokens = $null
+    $parseErrors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+    foreach ($parseError in $parseErrors) {
+        'erreur de syntaxe ligne {0}: {1}' -f $parseError.Extent.StartLineNumber, $parseError.Message
+    }
+}
+
+Export-ModuleMember -Function Get-AhuRepoRoot, Read-AhuJson, Write-AhuJson, Get-AhuManifest, Set-AhuProperty, Resolve-AhuRedirect, Get-AhuMsiProperty, Get-AhuInstallerInfo, Save-AhuDownload, Set-AhuActionOutput, Add-AhuStepSummary, Get-AhuHookHash, Get-AhuHookError

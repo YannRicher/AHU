@@ -2,7 +2,7 @@
 
 BeforeAll {
     $root = Split-Path -Path $PSScriptRoot -Parent
-    foreach ($module in 'Logging', 'Version', 'Catalog', 'Detection', 'Installer', 'Engine') {
+    foreach ($module in 'Logging', 'Version', 'Catalog', 'Detection', 'Hooks', 'Installer', 'Engine') {
         Import-Module (Join-Path $root ('engine\Modules\{0}.psm1' -f $module)) -Force -Global -DisableNameChecking
     }
 

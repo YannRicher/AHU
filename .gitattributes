@@ -5,3 +5,5 @@
 *.json text eol=lf
 *.yml  text eol=lf
 *.md   text eol=lf
+# Scripts avant/apres installation: LF, car le poste les telecharge tels que GitHub les sert (hash verifie)
+catalog/hooks/**/*.ps1 text eol=lf

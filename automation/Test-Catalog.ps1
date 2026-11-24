@@ -58,6 +58,25 @@ foreach ($item in Get-AhuManifest -CatalogRoot $CatalogRoot) {
     }
 }
 
+# Scripts avant/apres: catalog/hooks/<Id>/PreInstall.ps1 et PostInstall.ps1
+$hooksRoot = Join-Path $CatalogRoot 'hooks'
+if (Test-Path -LiteralPath $hooksRoot) {
+    foreach ($directory in Get-ChildItem -LiteralPath $hooksRoot -Directory) {
+        if (-not $ids.ContainsKey($directory.Name)) {
+            $errors.Add(('hooks/{0}: aucun manifeste avec cet Id' -f $directory.Name))
+        }
+        foreach ($file in Get-ChildItem -LiteralPath $directory.FullName -File) {
+            if (@('PreInstall.ps1', 'PostInstall.ps1') -notcontains $file.Name) {
+                $errors.Add(('hooks/{0}/{1}: nom inattendu (PreInstall.ps1 ou PostInstall.ps1)' -f $directory.Name, $file.Name))
+                continue
+            }
+            foreach ($message in Get-AhuHookError -Path $file.FullName) {
+                $errors.Add(('hooks/{0}/{1}: {2}' -f $directory.Name, $file.Name, $message))
+            }
+        }
+    }
+}
+
 foreach ($name in 'apps.pilot.json', 'apps.json') {
     $published = Join-Path $CatalogRoot $name
     try {
@@ -68,6 +87,17 @@ foreach ($name in 'apps.pilot.json', 'apps.json') {
             }
             foreach ($message in Test-AhuAppDefinition -App $property.Value) {
                 $errors.Add(('{0}: {1}: {2}' -f $name, $property.Name, $message))
+            }
+            foreach ($phase in 'PreInstall', 'PostInstall') {
+                $hook = Get-AhuValue $property.Value $phase
+                if (-not $hook) { continue }
+                $hookPath = Join-Path $hooksRoot ('{0}\{1}.ps1' -f $property.Name, $phase)
+                if (-not (Test-Path -LiteralPath $hookPath)) {
+                    $errors.Add(('{0}: {1}: script {2} introuvable dans catalog/hooks' -f $name, $property.Name, $phase))
+                }
+                elseif ((Get-AhuHookHash -Path $hookPath) -ne ([string](Get-AhuValue $hook 'Sha256' '')).ToUpperInvariant()) {
+                    $errors.Add(('{0}: {1}: SHA256 du script {2} different du fichier (executer Build-Catalog.ps1)' -f $name, $property.Name, $phase))
+                }
             }
         }
     }

@@ -22,10 +22,13 @@ flowchart LR
 ```
 AHU
 ├── catalog
-│   ├── apps.json                  # GÉNÉRÉ – lu par les postes
+│   ├── apps.json                  # GÉNÉRÉ – anneau production, lu par les postes
+│   ├── apps.pilot.json            # GÉNÉRÉ – anneau pilote
 │   ├── settings.json              # réglages globaux (Paused)
+│   ├── hooks                      # SOURCE – scripts avant/après : hooks/<Id>/PreInstall.ps1, PostInstall.ps1
 │   └── applications               # SOURCE DE VÉRITÉ – un fichier par application
 │       ├── zoom.json
+│       ├── 7-zip.json
 │       ├── adobereader.json
 │       ├── java.json
 │       └── vscode.json
@@ -38,22 +41,27 @@ AHU
 │       ├── Version.psm1           # comparaison de versions
 │       ├── Catalog.psm1           # lecture, cache et validation du catalogue
 │       ├── Detection.psm1         # registre + décision de conformité
+│       ├── Hooks.psm1             # scripts avant/après installation (fonctions de type PSADT)
 │       ├── Installer.psm1         # téléchargement, SHA256, signature, MSI/EXE
 │       └── Engine.psm1            # orchestration Detect / Remediate
 ├── intune
-│   ├── Detection.ps1              # GÉNÉRÉ – à téléverser dans Intune
-│   └── Remediation.ps1            # GÉNÉRÉ – à téléverser dans Intune
+│   ├── Detection.ps1              # GÉNÉRÉ – production, à téléverser dans Intune
+│   ├── Remediation.ps1            # GÉNÉRÉ – production
+│   ├── Detection-Pilote.ps1       # GÉNÉRÉ – anneau pilote
+│   └── Remediation-Pilote.ps1     # GÉNÉRÉ – anneau pilote
 ├── automation                     # exécuté par GitHub Actions (PowerShell 7)
 │   ├── AhuAutomation.psm1
-│   ├── Providers/RedirectMsi.ps1  # fournisseur de versions (Zoom)
+│   ├── Providers                  # fournisseurs de versions: RedirectMsi (Zoom), GitHubRelease (7-Zip)
 │   ├── Update-AppManifest.ps1
+│   ├── Promote-App.ps1            # pilote -> production
 │   ├── Get-UpdatableApp.ps1
 │   ├── Build-Catalog.ps1
 │   ├── Build-IntuneScripts.ps1
 │   ├── Test-Catalog.ps1
 │   └── Get-InstallerInfo.ps1      # aide pour remplir un manifeste Pinned
 ├── .github/workflows
-│   ├── UpdateCatalog.yml          # détection des nouvelles versions + commit
+│   ├── UpdateCatalog.yml          # détection des nouvelles versions + pull request
+│   ├── Promote.yml                # promotion pilote -> production (pull request)
 │   └── Validate.yml               # tests Pester 5.1/7 + validation du catalogue
 ├── tests                          # Pester 5
 └── docs
@@ -122,6 +130,66 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 > **Piège des versions** : Zoom publie `7.2.5.51704` dans son URL, mais le registre contient `7.2.51704` (la `ProductVersion` du MSI). Le fournisseur `RedirectMsi` lit donc la version **dans le MSI**, jamais dans l'URL.
 
 `catalog/settings.json` contient `"Paused": true|false`. C'est un interrupteur global : à `true`, tous les postes cessent d'installer quoi que ce soit.
+
+## Scripts avant / après installation
+
+Quand l'installation silencieuse ne suffit pas, une application peut avoir un script **avant** et/ou un script **après**, en PowerShell, dans le dépôt :
+
+```
+catalog/hooks/<Id>/PreInstall.ps1     # avant l'installateur
+catalog/hooks/<Id>/PostInstall.ps1    # après l'installateur
+```
+
+`<Id>` est l'`Id` du manifeste (ex. `Zoom`). **Rien à déclarer dans le manifeste** : `Build-Catalog.ps1` détecte les fichiers et publie leur URL et leur SHA256 dans les deux catalogues. Champ optionnel du manifeste : `HookTimeoutMinutes` (10 par défaut, par script).
+
+**Déroulement** (pour une application dont AHU doit installer ou mettre à jour la version) :
+
+1. Téléchargement et vérification (SHA256, signature) de l'installateur.
+2. Téléchargement et vérification du SHA256 des scripts. Si un hash ne correspond pas, **rien n'est modifié** sur le poste.
+3. `PreInstall.ps1`. S'il échoue, **l'installation est annulée** (visible dans le journal et dans Intune).
+4. Installateur, puis vérification de la version installée.
+5. `PostInstall.ps1`. S'il échoue, l'application reste installée, mais la remédiation est **signalée en échec**. Le script n'est pas rejoué automatiquement, car la détection voit déjà la bonne version.
+
+Les scripts s'exécutent seulement quand AHU installe, jamais à chaque détection. Ils tournent dans un **processus séparé** (même version de PowerShell que le moteur, compte SYSTEM, 64 bits) avec un délai maximum : un `exit N` ou une erreur ne peut pas arrêter le moteur. Succès = code 0 ; `throw` ou `exit N` (N différent de 0) = échec. Tout ce que le script écrit est copié dans `AHU.log` avec le préfixe `[PreInstall]` ou `[PostInstall]`.
+
+**Variables disponibles** (noms inspirés de PSAppDeployToolkit v3) : `$appId`, `$appName`, `$appVersion` (version cible), `$installedVersion` (version avant la mise à jour, vide si absente), `$installPhase`, `$installerPath`, `$dirAhuLogs`, `$envProgramFiles`, `$envProgramFilesX86`, `$envProgramData`, `$envCommonDesktop`, `$envCommonStartMenu`, `$envCommonStartMenuPrograms`, `$envCommonStartUp`, `$envWinDir`, `$envSystemDrive`, `$envTemp`.
+
+**Fonctions disponibles** (noms de PSADT v3, avec les alias v4 `*-ADT*` pour les mêmes opérations) :
+
+| Fonction | Rôle |
+|---|---|
+| `Write-Log -Message` | écrit dans le journal (`-Severity` 1 info, 2 avertissement, 3 erreur) |
+| `Remove-File -Path [-Recurse]` | supprime des fichiers (jokers permis, ex. `"$envCommonDesktop\Zoom*.lnk"`) ; rien si absent |
+| `Remove-Folder -Path` | supprime un dossier et son contenu |
+| `Copy-File -Path -Destination [-Recurse]`, `New-Folder -Path` | copie, création de dossier |
+| `Set-RegistryKey -Key -Name -Value -Type` | crée la clé si besoin et définit la valeur (`String`, `DWord`, `QWord`, `ExpandString`, `MultiString`, `Binary`) |
+| `Get-RegistryKey -Key [-Value]`, `Remove-RegistryKey -Key [-Name] [-Recurse]` | lecture, suppression |
+| `Get-InstalledApplication -Name [-Exact]` | cherche dans les entrées de désinstallation HKLM |
+| `Execute-Process -Path -Parameters [-IgnoreExitCodes]` | lance un programme et attend ; code non nul = erreur |
+
+Différence avec PSADT : ces fonctions **arrêtent le script sur erreur** par défaut. Ajouter `-ContinueOnError $true` pour consigner un avertissement et continuer. Les autres fonctions de PSADT (fenêtres, `Show-InstallationWelcome`, etc.) ne sont **pas** disponibles : les scripts tournent sans session utilisateur. Les clés `HKCU` visent le compte SYSTEM, donc sans effet pour les utilisateurs : utiliser `HKLM`.
+
+Exemple, `catalog/hooks/Zoom/PostInstall.ps1` :
+
+```powershell
+Write-Log "Zoom $appVersion installe (version precedente: $installedVersion)"
+Remove-File -Path "$envCommonDesktop\Zoom*.lnk" -ContinueOnError $true
+Set-RegistryKey -Key 'HKLM:\SOFTWARE\Exemple\Zoom' -Name 'Option' -Value 1 -Type DWord
+```
+
+**Règles du fichier** (vérifiées par `Test-Catalog.ps1`) : syntaxe PowerShell valide, et ASCII pur ou UTF-8 **avec BOM** (Windows PowerShell 5.1 lit sinon les accents en ANSI). Le dépôt stocke ces fichiers avec des fins de ligne LF (`.gitattributes`), car le poste les télécharge tels que GitHub les sert.
+
+**Test local d'un script** :
+
+```powershell
+foreach ($m in 'Logging', 'Version', 'Catalog', 'Hooks') { Import-Module .\engine\Modules\$m.psm1 -Force -Global -DisableNameChecking }
+Initialize-AhuLog -LogDirectory $env:TEMP\AHU\Logs | Out-Null
+$app = [pscustomobject]@{ Id = 'Zoom'; Name = 'Zoom'; Version = '7.2.51704' }
+Invoke-AhuHook -App $app -Phase PostInstall -ScriptPath .\catalog\hooks\Zoom\PostInstall.ps1 -DataRoot $env:TEMP\AHU -Verbose
+Get-Content $env:TEMP\AHU\Logs\AHU.log -Tail 20
+```
+
+**Attention aux anneaux** : il y a un seul fichier par script. Une modification fusionnée dans `main` s'applique donc **aux deux anneaux** (pilote et production) dès que le catalogue publié change. Teste le script en local avant de fusionner.
 
 ## Anneaux : pilote et production
 

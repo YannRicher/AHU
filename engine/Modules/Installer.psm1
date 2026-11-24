@@ -407,6 +407,24 @@ function Install-AhuApp {
             Write-AhuLog ('{0}: signature valide ({1})' -f $id, $subject)
         }
 
+        # 3b. Scripts avant/apres: telecharges et verifies (SHA256) avant de toucher au poste
+        $hookFiles = Get-AhuHookFile -App $App -Directory (Join-Path (Split-Path -Path $installer -Parent) 'hooks')
+        $hookTimeout = [double](Get-AhuValue $App 'HookTimeoutMinutes' 10)
+        $previousVersion = ''
+        if ($hookFiles.Count -gt 0) {
+            $previous = Find-AhuInstalledApp -App $App
+            if ($previous) { $previousVersion = [string]$previous.DisplayVersion }
+        }
+
+        if ($hookFiles.ContainsKey('PreInstall')) {
+            Write-AhuLog ('{0}: script avant installation demarre' -f $id)
+            $pre = Invoke-AhuHook -App $App -Phase PreInstall -ScriptPath $hookFiles['PreInstall'] -InstallerPath $installer -InstalledVersion $previousVersion -DataRoot $DataRoot -TimeoutMinutes $hookTimeout
+            if (-not $pre.Success) {
+                throw ('script avant installation en echec ({0}), installation annulee' -f $pre.Message)
+            }
+            Write-AhuLog ('{0}: script avant installation termine' -f $id)
+        }
+
         # 4. Installation
         $installArguments = [string](Get-AhuValue $App 'InstallArguments' '')
         if ($type -eq 'MSI') {
@@ -445,7 +463,27 @@ function Install-AhuApp {
         if ($rebootRequired) { $message += ' (redemarrage requis)' }
         Write-AhuLog ('{0}: {1}' -f $id, $message)
 
+        # 6. Script apres installation (l'application est deja installee: un echec est signale, pas annule)
+        $postFailure = $null
+        if ($hookFiles.ContainsKey('PostInstall')) {
+            Write-AhuLog ('{0}: script apres installation demarre' -f $id)
+            $post = Invoke-AhuHook -App $App -Phase PostInstall -ScriptPath $hookFiles['PostInstall'] -InstallerPath $installer -InstalledVersion ([string]$entry.DisplayVersion) -DataRoot $DataRoot -TimeoutMinutes $hookTimeout
+            if ($post.Success) {
+                Write-AhuLog ('{0}: script apres installation termine' -f $id)
+            }
+            else {
+                $postFailure = $post.Message
+            }
+        }
+
         Remove-Item -LiteralPath $appCache -Recurse -Force -ErrorAction SilentlyContinue
+
+        if ($postFailure) {
+            $failureMessage = '{0} - script apres installation en echec ({1})' -f $message, $postFailure
+            Write-AhuLog ('{0}: {1}' -f $id, $failureMessage) -Level Error
+            return New-AhuInstallResult -Status Failed -Message $failureMessage -ExitCode $exitCode -RebootRequired $rebootRequired
+        }
+
         return New-AhuInstallResult -Status Installed -Message $message -ExitCode $exitCode -RebootRequired $rebootRequired
     }
     catch {

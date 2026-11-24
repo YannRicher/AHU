@@ -26,7 +26,7 @@ param(
     [string]$DataRoot = (Join-Path $env:ProgramData 'AHU')
 )
 
-foreach ($module in 'Logging', 'Version', 'Catalog', 'Detection', 'Installer', 'Engine') {
+foreach ($module in 'Logging', 'Version', 'Catalog', 'Detection', 'Hooks', 'Installer', 'Engine') {
     Import-Module (Join-Path $PSScriptRoot ('Modules\{0}.psm1' -f $module)) -Force -Global -DisableNameChecking
 }
 

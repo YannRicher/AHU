@@ -115,6 +115,18 @@ function Test-AhuAppDefinition {
         }
     }
 
+    foreach ($phase in 'PreInstall', 'PostInstall') {
+        $hook = Get-AhuValue $App $phase
+        if ($hook) {
+            if ([string](Get-AhuValue $hook 'Url' '') -notmatch '^https://') {
+                '{0}: Url doit etre une URL https' -f $phase
+            }
+            if ([string](Get-AhuValue $hook 'Sha256' '') -notmatch '^[0-9a-fA-F]{64}$') {
+                '{0}: Sha256 obligatoire (64 caracteres hexadecimaux)' -f $phase
+            }
+        }
+    }
+
     $installers = @(Get-AhuValue $App 'Installers' @())
     foreach ($variant in $installers) {
         $locale = [string](Get-AhuValue $variant 'Locale' '')
