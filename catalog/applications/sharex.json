@@ -14,7 +14,7 @@
   "ConflictingProcesses": [
     "ShareX"
   ],
-  "ConflictAction": "Skip",
+  "ConflictAction": "Kill",
   "SignerSubject": "Ember Swan",
   "Updater": {
     "Type": "GitHubRelease",

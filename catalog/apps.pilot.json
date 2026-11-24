@@ -73,7 +73,7 @@
       "ConflictingProcesses": [
         "ShareX"
       ],
-      "ConflictAction": "Skip",
+      "ConflictAction": "Kill",
       "SignerSubject": "Ember Swan",
       "LastUpdated": "2026-11-24"
     },

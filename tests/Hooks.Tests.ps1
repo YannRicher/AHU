@@ -353,3 +353,71 @@ Describe 'Validation des scripts' {
         @(Get-AhuHookError -Path $withBom) | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Relance apres ConflictAction Kill' {
+    BeforeAll {
+        $cmdExe = Join-Path $env:SystemRoot 'System32\cmd.exe'
+        $cmdHash = (Get-FileHash -LiteralPath $cmdExe -Algorithm SHA256).Hash
+        $fakeApp = 'C:\Fake\ShareX.exe'
+
+        function New-KillFixture {
+            param([string]$Action = 'Kill', [string]$Arguments = '/c exit 0')
+            [pscustomobject]@{
+                Id = 'ShareX'; Name = 'ShareX'; Mode = 'Auto'; Version = '22.4.0'
+                DownloadUrl = 'https://test/setup.exe'; Sha256 = $cmdHash; InstallerType = 'EXE'
+                InstallArguments = $Arguments; RequireSignature = $false; DetectionName = @('ShareX*')
+                ConflictingProcesses = @('ShareX'); ConflictAction = $Action
+            }
+        }
+    }
+
+    BeforeEach {
+        $dir = New-TempDirectory
+        Initialize-AhuLog -LogDirectory (Join-Path $dir 'Logs') | Out-Null
+        Mock -ModuleName Installer Find-AhuInstalledApp { [pscustomobject]@{ DisplayVersion = '22.4.0' } }
+        Mock -ModuleName Installer Start-Sleep { }
+        Mock -ModuleName Installer Stop-Process { }
+        Mock -ModuleName Installer Start-AhuUserProcess { $true }
+        Mock -ModuleName Installer Get-AhuConflictingProcess { [pscustomobject]@{ ProcessName = 'ShareX'; Path = $fakeApp } }
+        Mock -ModuleName Installer Save-AhuFile {
+            New-Item -ItemType Directory -Path (Split-Path -Path $Destination -Parent) -Force | Out-Null
+            Copy-Item -LiteralPath $cmdExe -Destination $Destination -Force
+        }
+    }
+
+    AfterEach {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'ferme le processus, installe, puis le relance dans la session de l''utilisateur' {
+        $result = Install-AhuApp -App (New-KillFixture) -DataRoot $dir
+        $result.Status | Should -Be 'Installed'
+        Should -Invoke -ModuleName Installer Stop-Process -Times 1 -Exactly
+        Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 1 -Exactly -ParameterFilter { $FilePath -eq $fakeApp }
+    }
+
+    It 'relance aussi quand l''installation echoue (l''utilisateur ne perd pas l''application)' {
+        $result = Install-AhuApp -App (New-KillFixture -Arguments '/c exit 5') -DataRoot $dir
+        $result.Status | Should -Be 'Failed'
+        Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 1 -Exactly -ParameterFilter { $FilePath -eq $fakeApp }
+    }
+
+    It 'en mode Skip, rien n''est ferme ni relance (report)' {
+        $result = Install-AhuApp -App (New-KillFixture -Action 'Skip') -DataRoot $dir
+        $result.Status | Should -Be 'Deferred'
+        Should -Invoke -ModuleName Installer Stop-Process -Times 0 -Exactly
+        Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 0 -Exactly
+    }
+
+    It 'sans conflit, aucune relance' {
+        Mock -ModuleName Installer Get-AhuConflictingProcess { @() }
+        $result = Install-AhuApp -App (New-KillFixture) -DataRoot $dir
+        $result.Status | Should -Be 'Installed'
+        Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 0 -Exactly
+    }
+
+    It 'Start-AhuUserProcess retourne $false sans lever d''erreur si l''executable est absent' {
+        Mock -ModuleName Installer Start-AhuUserProcess { $false }
+        { Start-AhuUserProcess -FilePath 'C:\pas-la\x.exe' } | Should -Not -Throw
+    }
+}

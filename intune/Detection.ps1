@@ -1310,6 +1310,44 @@ function Invoke-AhuProcess {
     }
 }
 
+function Start-AhuUserProcess {
+    <#
+        Lance un programme dans la session de l'utilisateur connecte (le moteur tourne en SYSTEM,
+        qui ne peut pas afficher de fenetre). Utilise une tache planifiee ponctuelle, lancee pour
+        le groupe Utilisateurs, puis supprimee. Retourne $false sans lever d'erreur en cas d'echec.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    if (-not (Test-Path -LiteralPath $FilePath)) {
+        Write-AhuLog ('relance impossible, executable introuvable: {0}' -f $FilePath) -Level Warning
+        return $false
+    }
+
+    $taskName = 'AHU-Relance-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8)
+    try {
+        $action = New-ScheduledTaskAction -Execute $FilePath
+        # S-1-5-32-545 = groupe Utilisateurs (session interactive)
+        $principal = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Limited
+        Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force -ErrorAction Stop | Out-Null
+        Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        Start-Sleep -Seconds 3
+        Write-AhuLog ('relance de {0} dans la session de l''utilisateur' -f (Split-Path -Path $FilePath -Leaf))
+        return $true
+    }
+    catch {
+        Write-AhuLog ('relance impossible de {0}: {1}' -f (Split-Path -Path $FilePath -Leaf), $_.Exception.Message) -Level Warning
+        return $false
+    }
+    finally {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+}
+
 function Split-AhuUninstallCommand {
     [CmdletBinding()]
     param(
@@ -1511,12 +1549,16 @@ function Install-AhuApp {
     $type = ([string](Get-AhuValue $App 'InstallerType' '')).ToUpperInvariant()
     $url = [string](Get-AhuValue $App 'DownloadUrl' '')
 
+    # Executables fermes par ConflictAction=Kill: relances dans la session de l'utilisateur a la fin (succes ou echec)
+    $relaunchPaths = @()
+
     # 1. Processus en conflit (ex.: Zoom ouvert pendant une reunion)
     $conflicts = @(Get-AhuConflictingProcess -App $App)
     if ($conflicts.Count -gt 0) {
         $names = (@($conflicts | ForEach-Object { $_.ProcessName } | Select-Object -Unique)) -join ', '
         if ([string](Get-AhuValue $App 'ConflictAction' 'Skip') -eq 'Kill') {
             Write-AhuLog ('{0}: fermeture des processus en conflit ({1})' -f $id, $names)
+            $relaunchPaths = @($conflicts | Where-Object { $_.Path } | ForEach-Object { $_.Path } | Select-Object -Unique)
             $conflicts | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 3
         }
@@ -1660,6 +1702,12 @@ function Install-AhuApp {
         $message = 'echec: {0}' -f $_.Exception.Message
         Write-AhuLog ('{0}: {1}' -f $id, $message) -Level Error
         return New-AhuInstallResult -Status Failed -Message $message
+    }
+    finally {
+        # Rouvre ce qui a ete ferme, meme si la mise a jour a echoue (l'utilisateur ne doit pas perdre l'application)
+        foreach ($path in $relaunchPaths) {
+            [void](Start-AhuUserProcess -FilePath $path)
+        }
     }
 }
 
