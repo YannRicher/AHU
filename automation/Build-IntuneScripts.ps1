@@ -29,6 +29,21 @@ foreach ($module in $modules) {
     $body.Add('')
 }
 
+# Empreinte du code integre (deterministe: pas de date) inscrite dans le journal des postes
+$sha = [System.Security.Cryptography.SHA256]::Create()
+$hashBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes(($body -join "`n")))
+$sha.Dispose()
+$build = (-join ($hashBytes | ForEach-Object { $_.ToString('x2') })).Substring(0, 8)
+$placeholder = '$script:AhuEngineBuild = ''sources'''
+$replaced = 0
+for ($i = 0; $i -lt $body.Count; $i++) {
+    if ($body[$i] -eq $placeholder) {
+        $body[$i] = '$script:AhuEngineBuild = ''{0}''' -f $build
+        $replaced++
+    }
+}
+if ($replaced -ne 1) { throw 'Marqueur $script:AhuEngineBuild introuvable (ou en double) dans Engine.psm1' }
+
 $outputDirectory = Join-Path $root 'intune'
 if (-not (Test-Path -LiteralPath $outputDirectory)) {
     New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
@@ -75,6 +90,6 @@ foreach ($ring in $rings) {
 
         $output = Join-Path $outputDirectory $file
         [System.IO.File]::WriteAllText($output, (($lines -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
-        Write-Host ('{0} genere ({1:N0} Ko)' -f $output, ((Get-Item -LiteralPath $output).Length / 1KB))
+        Write-Host ('{0} genere ({1:N0} Ko, build {2})' -f $output, ((Get-Item -LiteralPath $output).Length / 1KB), $build)
     }
 }

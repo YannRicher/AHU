@@ -1716,6 +1716,19 @@ function Install-AhuApp {
 #region engine/Modules/Engine.psm1
 # AHU - Orchestration (Detect / Remediate) pour Intune Remediations
 
+# Version du moteur: a incrementer a chaque changement de code execute sur les postes
+# (apparait dans AHU.log pour savoir quel moteur a roule). Le build est une empreinte du code,
+# calculee par automation/Build-IntuneScripts.ps1 ('sources' = modules du depot, hors Intune).
+$script:AhuEngineVersion = '1.3.0'
+$script:AhuEngineBuild = '1d03e4ee'
+
+function Get-AhuEngineVersion {
+    [CmdletBinding()]
+    param()
+
+    '{0} (build {1})' -f $script:AhuEngineVersion, $script:AhuEngineBuild
+}
+
 function New-AhuEngineResult {
     [CmdletBinding()]
     param(
@@ -1760,8 +1773,7 @@ function Invoke-AhuEngine {
     $explicit = $AppId.Count -gt 0
 
     Initialize-AhuLog -LogDirectory (Join-Path $DataRoot 'Logs') | Out-Null
-    Write-AhuLog ('===== AHU {0} - PowerShell {1} ({2} bits) - compte {3} =====' -f $Action, $PSVersionTable.PSVersion, ([IntPtr]::Size * 8), [Security.Principal.WindowsIdentity]::GetCurrent().Name)
-
+    Write-AhuLog ('===== AHU {0} - moteur {1} - PowerShell {2} ({3} bits) - compte {4} =====' -f $Action, (Get-AhuEngineVersion), $PSVersionTable.PSVersion, ([IntPtr]::Size * 8), [Security.Principal.WindowsIdentity]::GetCurrent().Name)
     $mutex = $null
     $ownsMutex = $false
     if ($Action -eq 'Remediate') {

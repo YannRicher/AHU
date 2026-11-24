@@ -51,6 +51,15 @@ Describe 'Catalogues publies' {
         }
     }
 
+    It 'les scripts Intune portent la meme empreinte de moteur (jamais "sources")' {
+        $builds = foreach ($file in 'Detection', 'Remediation', 'Detection-Pilote', 'Remediation-Pilote') {
+            $text = Get-Content -LiteralPath (Join-Path $root ('intune\{0}.ps1' -f $file)) -Raw
+            $text | Should -Match '\$script:AhuEngineBuild = ''[0-9a-f]{8}'''
+            [regex]::Match($text, '\$script:AhuEngineBuild = ''([0-9a-f]{8})''').Groups[1].Value
+        }
+        @($builds | Select-Object -Unique).Count | Should -Be 1
+    }
+
     It 'les scripts Intune pilote et production pointent vers le bon catalogue' {
         Get-Content -LiteralPath (Join-Path $root 'intune\Detection.ps1') -Raw | Should -Match 'catalog/apps\.json'
         Get-Content -LiteralPath (Join-Path $root 'intune\Remediation.ps1') -Raw | Should -Match 'catalog/apps\.json'

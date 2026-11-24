@@ -239,7 +239,7 @@ Les scripts Intune sont **autonomes** : les modules y sont intégrés par `autom
 `C:\ProgramData\AHU\Logs\AHU.log` (rotation à 5 Mo vers `AHU.log.old`) :
 
 ```
-2026-11-16 10:15:00 - ===== AHU Remediate - PowerShell 5.1.26100 (64 bits) - compte AUTORITE NT\Système =====
+2026-11-16 10:15:00 - ===== AHU Remediate - moteur 1.3.0 (build c7b8fda4) - PowerShell 5.1.26100 (64 bits) - compte AUTORITE NT\Système =====
 2026-11-16 10:15:00 - Catalogue charge depuis https://raw.githubusercontent.com/... (4 application(s))
 2026-11-16 10:15:00 - Zoom: version 7.1.48953 detectee - mise a jour requise vers 7.2.51704 (mode Auto)
 2026-11-16 10:15:01 - Zoom: telechargement demarre (https://cdn.zoom.us/prod/7.2.5.51704/x64/ZoomInstallerFull.msi)
@@ -247,6 +247,8 @@ Les scripts Intune sont **autonomes** : les modules y sont intégrés par `autom
 2026-11-16 10:15:41 - Zoom: signature valide (CN=Zoom Communications, Inc., ...)
 2026-11-16 10:16:12 - Zoom: installation completee, version 7.2.51704 detectee
 ```
+
+La première ligne de chaque exécution indique la **version du moteur** et son **build** (empreinte du code, identique dans les 4 scripts Intune) : cela permet de savoir exactement quel moteur a roulé sur un poste. Incrémenter `$script:AhuEngineVersion` dans `engine/Modules/Engine.psm1` à chaque changement du moteur ; le build est recalculé par `automation/Build-IntuneScripts.ps1`.
 
 Les journaux MSI détaillés sont écrits dans `C:\ProgramData\AHU\Logs\<Id>-<version>-msi.log`. Le dernier catalogue valide est conservé dans `C:\ProgramData\AHU\Cache\apps.json` : si GitHub est inaccessible, le poste utilise cette copie.
 

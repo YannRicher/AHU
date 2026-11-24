@@ -263,4 +263,21 @@ Describe 'Invoke-AhuEngine (catalogue local)' {
         $log | Should -Not -BeNullOrEmpty
         $log[0] | Should -Match '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - '
     }
+
+    It 'inscrit la version du moteur dans l''entete du journal' {
+        Mock -ModuleName Engine Get-AhuUninstallEntry { }
+        $fresh = Join-Path ([System.IO.Path]::GetTempPath()) ('AHU-Tests-' + [guid]::NewGuid().ToString('N'))
+        try {
+            [void](Invoke-AhuEngine -Action Detect -CatalogPath $catalogPath -DataRoot $fresh)
+            $log = Get-Content -LiteralPath (Join-Path $fresh 'Logs\AHU.log')
+            $log[0] | Should -Match '===== AHU Detect - moteur \d+\.\d+\.\d+ \(build \S+\) - PowerShell '
+        }
+        finally {
+            Remove-Item -LiteralPath $fresh -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'Get-AhuEngineVersion retourne version et build' {
+        Get-AhuEngineVersion | Should -Match '^\d+\.\d+\.\d+ \(build \S+\)$'
+    }
 }
