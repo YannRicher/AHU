@@ -140,7 +140,9 @@ function Find-AhuInstalledApp {
         Retourne l'entree installee correspondant a l'application.
         Sans -All: la plus haute version (ou $null).
         Avec -All: toutes les correspondances, la plus ancienne en premier.
-        Champs du catalogue: DetectionName (=Nom pour une egalite stricte), DetectionExclude, DetectionPublisher.
+        Champs du catalogue: DetectionName (=Nom pour une egalite stricte), DetectionExclude, DetectionPublisher,
+        DetectionView (Registry64 ou Registry32: vue de registre a examiner; absent = les deux).
+        Ex.: Java 64 bits et Java 32 bits sont deux installations distinctes (JRE x64 et x86).
     #>
     [CmdletBinding()]
     param(
@@ -159,8 +161,10 @@ function Find-AhuInstalledApp {
     $include = @(Get-AhuValue $App 'DetectionName' @())
     $exclude = @(Get-AhuValue $App 'DetectionExclude' @())
     $publisher = @(Get-AhuValue $App 'DetectionPublisher' @())
+    $view = [string](Get-AhuValue $App 'DetectionView' '')
 
     $found = foreach ($entry in $Entries) {
+        if ($view -and $entry.RegistryView -ne $view) { continue }
         if (-not (Test-AhuNameMatch -Value $entry.DisplayName -Pattern $include)) { continue }
         if ($exclude.Count -gt 0 -and (Test-AhuNameMatch -Value $entry.DisplayName -Pattern $exclude)) { continue }
         if ($publisher.Count -gt 0 -and -not (Test-AhuNameMatch -Value $entry.Publisher -Pattern $publisher)) { continue }

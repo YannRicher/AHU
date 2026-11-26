@@ -239,6 +239,11 @@ function Test-AhuAppDefinition {
         'DetectionName manquant'
     }
 
+    $view = [string](Get-AhuValue $App 'DetectionView' '')
+    if ($view -and @('Registry64', 'Registry32') -notcontains $view) {
+        "DetectionView invalide '{0}' (valeurs permises: Registry64, Registry32)" -f $view
+    }
+
     $conflictAction = [string](Get-AhuValue $App 'ConflictAction' 'Skip')
     if (@('Skip', 'Kill') -notcontains $conflictAction) {
         "ConflictAction invalide '{0}' (valeurs permises: Skip, Kill)" -f $conflictAction
@@ -551,7 +556,9 @@ function Find-AhuInstalledApp {
         Retourne l'entree installee correspondant a l'application.
         Sans -All: la plus haute version (ou $null).
         Avec -All: toutes les correspondances, la plus ancienne en premier.
-        Champs du catalogue: DetectionName (=Nom pour une egalite stricte), DetectionExclude, DetectionPublisher.
+        Champs du catalogue: DetectionName (=Nom pour une egalite stricte), DetectionExclude, DetectionPublisher,
+        DetectionView (Registry64 ou Registry32: vue de registre a examiner; absent = les deux).
+        Ex.: Java 64 bits et Java 32 bits sont deux installations distinctes (JRE x64 et x86).
     #>
     [CmdletBinding()]
     param(
@@ -570,8 +577,10 @@ function Find-AhuInstalledApp {
     $include = @(Get-AhuValue $App 'DetectionName' @())
     $exclude = @(Get-AhuValue $App 'DetectionExclude' @())
     $publisher = @(Get-AhuValue $App 'DetectionPublisher' @())
+    $view = [string](Get-AhuValue $App 'DetectionView' '')
 
     $found = foreach ($entry in $Entries) {
+        if ($view -and $entry.RegistryView -ne $view) { continue }
         if (-not (Test-AhuNameMatch -Value $entry.DisplayName -Pattern $include)) { continue }
         if ($exclude.Count -gt 0 -and (Test-AhuNameMatch -Value $entry.DisplayName -Pattern $exclude)) { continue }
         if ($publisher.Count -gt 0 -and -not (Test-AhuNameMatch -Value $entry.Publisher -Pattern $publisher)) { continue }
@@ -1719,8 +1728,8 @@ function Install-AhuApp {
 # Version du moteur: a incrementer a chaque changement de code execute sur les postes
 # (apparait dans AHU.log pour savoir quel moteur a roule). Le build est une empreinte du code,
 # calculee par automation/Build-IntuneScripts.ps1 ('sources' = modules du depot, hors Intune).
-$script:AhuEngineVersion = '1.3.0'
-$script:AhuEngineBuild = '1d03e4ee'
+$script:AhuEngineVersion = '1.3.1'
+$script:AhuEngineBuild = 'dcf7e9b4'
 
 function Get-AhuEngineVersion {
     [CmdletBinding()]
@@ -1823,7 +1832,8 @@ function Invoke-AhuEngine {
                 }
 
                 $matches = @(Find-AhuInstalledApp -App $app -Entries $entries -All)
-                $entry = if ($matches.Count -gt 0) { $matches[0] } else { $null }
+                # -All trie de la plus ancienne a la plus recente: on retient la plus recente
+                $entry = if ($matches.Count -gt 0) { $matches[-1] } else { $null }
                 $installedVersion = if ($entry) { $entry.DisplayVersion } else { $null }
                 $decision = Get-AhuAppDecision -App $app -InstalledVersion $installedVersion
                 $detail = $decision.Message

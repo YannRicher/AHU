@@ -91,6 +91,11 @@ function Test-AhuAppDefinition {
         'DetectionName manquant'
     }
 
+    $view = [string](Get-AhuValue $App 'DetectionView' '')
+    if ($view -and @('Registry64', 'Registry32') -notcontains $view) {
+        "DetectionView invalide '{0}' (valeurs permises: Registry64, Registry32)" -f $view
+    }
+
     $conflictAction = [string](Get-AhuValue $App 'ConflictAction' 'Skip')
     if (@('Skip', 'Kill') -notcontains $conflictAction) {
         "ConflictAction invalide '{0}' (valeurs permises: Skip, Kill)" -f $conflictAction

@@ -112,6 +112,21 @@ Describe 'Find-AhuInstalledApp' {
         $found.DisplayVersion | Should -Be '7.1.48953'
     }
 
+    It 'DetectionView: ignore les entrees de l''autre vue de registre (Java x64 et x86)' {
+        $x64 = [pscustomobject]@{ DisplayName = 'Java 8 Update 513'; DisplayVersion = '8.0.5130.4'; Publisher = 'Oracle Corporation'; RegistryView = 'Registry64' }
+        $x86 = [pscustomobject]@{ DisplayName = 'Java 8 Update 151'; DisplayVersion = '8.0.1510.12'; Publisher = 'Oracle Corporation'; RegistryView = 'Registry32' }
+        $entries = @($x64, $x86)
+        $app64 = New-TestApp @{ DetectionName = 'Java 8 Update*'; DetectionPublisher = 'Oracle*'; DetectionView = 'Registry64' }
+        $app32 = New-TestApp @{ DetectionName = 'Java 8 Update*'; DetectionPublisher = 'Oracle*'; DetectionView = 'Registry32' }
+        (Find-AhuInstalledApp -App $app64 -Entries $entries).DisplayVersion | Should -Be '8.0.5130.4'
+        (Find-AhuInstalledApp -App $app32 -Entries $entries).DisplayVersion | Should -Be '8.0.1510.12'
+        @(Find-AhuInstalledApp -App (New-TestApp @{ DetectionName = 'Java 8 Update*' }) -Entries $entries -All).Count | Should -Be 2
+    }
+
+    It 'DetectionView invalide: erreur de definition' {
+        @(Test-AhuAppDefinition -App (New-TestApp @{ DetectionView = 'Registry16' })) -join ' ' | Should -Match 'DetectionView invalide'
+    }
+
     It 'trouve l''ancien nom Zoom (64-bit)' {
         $found = Find-AhuInstalledApp -App (New-TestApp @{}) -Entries @(New-TestEntry 'Zoom (64-bit)' '5.17.31859')
         $found.DisplayVersion | Should -Be '5.17.31859'
@@ -243,6 +258,16 @@ Describe 'Invoke-AhuEngine (catalogue local)' {
     It 'Detect: conforme si Zoom est a jour' {
         Mock -ModuleName Engine Get-AhuUninstallEntry { New-TestEntry 'Zoom Workplace (64-bit)' '7.2.51704' }
         (Invoke-AhuEngine -Action Detect -CatalogPath $catalogPath -DataRoot $dataRoot).ExitCode | Should -Be 0
+    }
+
+    It 'Detect: retient la version la plus recente si deux versions sont installees (ex. Java 8u151 et 8u513)' {
+        Mock -ModuleName Engine Get-AhuUninstallEntry {
+            New-TestEntry 'Zoom Workplace (64-bit)' '7.1.48953'
+            New-TestEntry 'Zoom Workplace (64-bit)' '7.2.51704'
+        }
+        $result = Invoke-AhuEngine -Action Detect -CatalogPath $catalogPath -DataRoot $dataRoot
+        $result.ExitCode | Should -Be 0
+        $result.Summary | Should -Match 'version 7.2.51704 detectee'
     }
 
     It 'Detect: conforme si Zoom est absent' {

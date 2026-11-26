@@ -1,0 +1,23 @@
+{
+  "Id": "Java-x86",
+  "Name": "Java 8 (Oracle JRE 32 bits)",
+  "Mode": "Pinned",
+  "Version": "8.0.5130.4",
+  "DownloadUrl": "https://javadl.oracle.com/webapps/download/GetFile/1.8.0_513-b04/0d75e87f2be44001b911a40e63560df4/windows-i586/jre-8u513-windows-i586.exe",
+  "Sha256": "412A1FE5358B2A723264DD4F67C0FE9F239D9F45C02B8117A8F074AFDEEC24D9",
+  "InstallerType": "EXE",
+  "InstallArguments": "INSTALL_SILENT=Enable SPONSORS=Disable AUTO_UPDATE=Disable REBOOT=Disable",
+  "DetectionName": [
+    "Java 8 Update*"
+  ],
+  "DetectionPublisher": "Oracle*",
+  "DetectionView": "Registry32",
+  "InstallIfMissing": false,
+  "ConflictingProcesses": [
+    "javaw"
+  ],
+  "ConflictAction": "Skip",
+  "SignerSubject": "Oracle America",
+  "Notes": "Oracle JRE 8 Update 513 32 bits (SHA256 et signature Oracle America verifies le 26/11/2026). Vue de registre 32 bits (WOW6432Node) seulement: ne s'installe que si un JRE 32 bits est deja present (InstallIfMissing=false). Pinned: meme mise a jour manuelle que Java (x64).",
+  "LastUpdated": "2026-11-26"
+}

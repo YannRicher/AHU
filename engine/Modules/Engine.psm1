@@ -3,7 +3,7 @@
 # Version du moteur: a incrementer a chaque changement de code execute sur les postes
 # (apparait dans AHU.log pour savoir quel moteur a roule). Le build est une empreinte du code,
 # calculee par automation/Build-IntuneScripts.ps1 ('sources' = modules du depot, hors Intune).
-$script:AhuEngineVersion = '1.3.0'
+$script:AhuEngineVersion = '1.3.1'
 $script:AhuEngineBuild = 'sources'
 
 function Get-AhuEngineVersion {
@@ -107,7 +107,8 @@ function Invoke-AhuEngine {
                 }
 
                 $matches = @(Find-AhuInstalledApp -App $app -Entries $entries -All)
-                $entry = if ($matches.Count -gt 0) { $matches[0] } else { $null }
+                # -All trie de la plus ancienne a la plus recente: on retient la plus recente
+                $entry = if ($matches.Count -gt 0) { $matches[-1] } else { $null }
                 $installedVersion = if ($entry) { $entry.DisplayVersion } else { $null }
                 $decision = Get-AhuAppDecision -App $app -InstalledVersion $installedVersion
                 $detail = $decision.Message

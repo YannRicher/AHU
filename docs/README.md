@@ -111,6 +111,7 @@ Par défaut, AHU **met à jour seulement les applications déjà installées**, 
 | `DetectionName` | oui | Nom(s) dans « Programmes et fonctionnalités ». Sans `*` ni `?`, la correspondance est partielle (`Workplace` = `*Workplace*`). Un préfixe `=` exige le nom exact (`=Zoom` ne prend pas « Zoom Outlook Plugin »). Les copies par utilisateur (ruche chargée) sont vues aussi. |
 | `DetectionExclude` | non | Noms à ignorer (plugins, VDI…). |
 | `DetectionPublisher` | non | Filtre sur l'éditeur. |
+| `DetectionView` | non | `Registry64` ou `Registry32` : ne considérer que la vue de registre donnée. Permet de gérer séparément un JRE 64 bits et un JRE 32 bits (`Java` et `Java-x86`). |
 | `Version` | Auto/Pinned | Version **telle qu'écrite dans le registre** (`DisplayVersion`). |
 | `DownloadUrl` | Auto/Pinned | URL https de l'installateur. Idéalement versionnée, pour que le SHA256 reste valide. |
 | `Sha256` | recommandé | Vérifié avant l'installation. |
