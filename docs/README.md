@@ -75,7 +75,7 @@ AHU
 | Mode | Comportement | Exemples |
 |------|--------------|----------|
 | `Auto` | Toujours la dernière version approuvée. GitHub Actions met `Version` à jour automatiquement. | Zoom, VS Code, 7-Zip, WinSCP, Notepad++ |
-| `Pinned` | Version précise fixée par un humain (pull request). Pas de retour arrière si une version plus récente est installée. | Adobe Reader, Java, Antidote, AutoCAD, MATLAB, SPSS |
+| `Pinned` | Version précise fixée par un humain (pull request). Pas de retour arrière si une version plus récente est installée. | Adobe Reader, Java (Oracle), Antidote, AutoCAD, MATLAB, SPSS |
 | `Manual` | Application connue du catalogue (inventaire dans le journal), aucune action. | Applications en évaluation |
 
 Par défaut, AHU **met à jour seulement les applications déjà installées**, comme Patch My PC. Une application absente est conforme, sauf si `InstallIfMissing` vaut `true`.
@@ -289,7 +289,6 @@ Vérifier sur un poste test que `Version` correspond **exactement** à la `Displ
 
 - `RedirectMsi` : un lien « latest » stable qui redirige vers un MSI versionné (Zoom).
 - `GitHubRelease` : le dernier asset d'une release GitHub publique, avec `Repo` (ex. `ip7z/7zip`) et `AssetPattern` (ex. `7z*-x64.exe`) (7-Zip).
-
 Sinon, ajouter `automation/Providers/<Type>.ps1` (voir `ARCHITECTURE.md`). Une nouvelle application Auto arrive d'abord dans l'anneau pilote ; la promotion en production est manuelle (voir « Anneaux »).
 
 ## Tests locaux

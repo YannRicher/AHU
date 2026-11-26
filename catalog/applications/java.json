@@ -1,8 +1,22 @@
 {
   "Id": "Java",
   "Name": "Java 8 (Oracle JRE)",
-  "Mode": "Manual",
-  "DetectionName": "Java 8 Update*",
+  "Mode": "Pinned",
+  "Version": "8.0.5130.4",
+  "DownloadUrl": "https://javadl.oracle.com/webapps/download/GetFile/1.8.0_513-b04/0d75e87f2be44001b911a40e63560df4/windows-i586/jre-8u513-windows-x64.exe",
+  "Sha256": "1F82AC0241C8D63E455C149759F92FA1BE3E1B0A79ACE323C8E73B83D79E7176",
+  "InstallerType": "EXE",
+  "InstallArguments": "INSTALL_SILENT=Enable SPONSORS=Disable AUTO_UPDATE=Disable REBOOT=Disable",
+  "DetectionName": [
+    "Java 8 Update*"
+  ],
   "DetectionPublisher": "Oracle*",
-  "Notes": "Cible: mode Pinned (licence Oracle a valider). Alternative recommandee: Eclipse Temurin (MSI) en mode Auto."
+  "InstallIfMissing": false,
+  "ConflictingProcesses": [
+    "javaw"
+  ],
+  "ConflictAction": "Skip",
+  "SignerSubject": "Oracle America",
+  "Notes": "Oracle JRE 8 Update 513 (SHA256 et signature Oracle America verifies le 26/11/2026). Pinned: pas d'API de mise a jour Oracle; chaque nouvelle version = pull request (URL, SHA256, Version). LICENCE: l'Oracle Technology Network License (depuis avril 2019) n'autorise pas l'usage commercial sans abonnement Java SE; a valider pour le cegep. Les switches silencieux sont a valider sur le pilote. Reporte si javaw est ouvert. InstallIfMissing=false.",
+  "LastUpdated": "2026-11-26"
 }
