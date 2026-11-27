@@ -98,9 +98,9 @@
     "ShareX": {
       "Name": "ShareX",
       "Mode": "Auto",
-      "Version": "22.4.0",
-      "DownloadUrl": "https://github.com/ShareX/ShareX/releases/download/v22.4.0/ShareX-22.4.0-setup-x64.exe",
-      "Sha256": "5FAC6EE58600976586D706F164B0F8A992FFF7679BF2724A1F678C4A63894A8E",
+      "Version": "22.5.0                                            ",
+      "DownloadUrl": "https://github.com/ShareX/ShareX/releases/download/v22.5.0/ShareX-22.5.0-setup-x64.exe",
+      "Sha256": "0AC699FDE6D29C53EC135864509A7B802FA2E9004484F34165095E5A744D4C0F",
       "InstallerType": "EXE",
       "InstallArguments": "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",
       "DetectionName": [
@@ -112,7 +112,7 @@
       ],
       "ConflictAction": "Kill",
       "SignerSubject": "Ember Swan",
-      "LastUpdated": "2026-11-24"
+      "LastUpdated": "2026-11-27"
     },
     "VSCode": {
       "Name": "Microsoft Visual Studio Code (installation systeme)",
