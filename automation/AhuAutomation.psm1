@@ -186,6 +186,11 @@ function Get-AhuInstallerInfo {
         $info.Manufacturer = $versionInfo.CompanyName
     }
 
+    # Certains installateurs completent leurs champs par des espaces (ex. ShareX): ne jamais les propager au catalogue
+    foreach ($name in 'ProductName', 'ProductVersion', 'ProductCode', 'Manufacturer') {
+        if ($null -ne $info[$name]) { $info[$name] = ([string]$info[$name]).Trim() }
+    }
+
     [pscustomobject]$info
 }
 

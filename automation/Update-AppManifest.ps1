@@ -48,7 +48,8 @@ if (-not (Test-Path -LiteralPath $provider)) {
 
 try {
     $latest = & $provider -Manifest $manifest -Updater $updater -WorkDirectory $WorkDirectory
-    $current = [string](Get-AhuValue $manifest 'Version' '')
+    $current = ([string](Get-AhuValue $manifest 'Version' '')).Trim()
+    if ($null -ne $latest.Version) { $latest.Version = ([string]$latest.Version).Trim() }
 
     if ($latest.Unchanged) {
         Write-Host ('{0}: a jour ({1}).' -f $AppId, $current)

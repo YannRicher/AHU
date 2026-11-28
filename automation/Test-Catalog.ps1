@@ -14,6 +14,14 @@ Import-Module (Join-Path $PSScriptRoot 'AhuAutomation.psm1') -Force -Global -Dis
 $errors = New-Object System.Collections.Generic.List[string]
 $ids = @{}
 
+function Get-VersionWhitespaceError {
+    param($Definition, [string]$Label)
+    $version = Get-AhuValue $Definition 'Version'
+    if ($null -ne $version -and [string]$version -ne ([string]$version).Trim()) {
+        '{0}: Version avec espaces superflus ({1})' -f $Label, ('"{0}"' -f $version)
+    }
+}
+
 foreach ($item in Get-AhuManifest -CatalogRoot $CatalogRoot) {
     $file = Split-Path -Path $item.Path -Leaf
     $manifest = $item.Manifest
@@ -37,9 +45,11 @@ foreach ($item in Get-AhuManifest -CatalogRoot $CatalogRoot) {
     foreach ($message in Test-AhuAppDefinition -App $manifest) {
         $errors.Add(('{0}: {1}' -f $file, $message))
     }
+    foreach ($message in @(Get-VersionWhitespaceError -Definition $manifest -Label $file)) { if ($message) { $errors.Add($message) } }
 
     $production = Get-AhuValue $manifest 'Production'
     if ($production) {
+        foreach ($message in @(Get-VersionWhitespaceError -Definition $production -Label ('{0} (Production)' -f $file))) { if ($message) { $errors.Add($message) } }
         $definition = [pscustomobject]@{ Id = $id; Mode = $manifest.Mode; Version = $production.Version; DownloadUrl = $production.DownloadUrl; Sha256 = (Get-AhuValue $production 'Sha256' ''); InstallerType = $manifest.InstallerType; DetectionName = $manifest.DetectionName }
         foreach ($message in Test-AhuAppDefinition -App $definition) {
             $errors.Add(('{0} (Production): {1}' -f $file, $message))
@@ -88,6 +98,7 @@ foreach ($name in 'apps.pilot.json', 'apps.json') {
             foreach ($message in Test-AhuAppDefinition -App $property.Value) {
                 $errors.Add(('{0}: {1}: {2}' -f $name, $property.Name, $message))
             }
+            foreach ($message in @(Get-VersionWhitespaceError -Definition $property.Value -Label ('{0}: {1}' -f $name, $property.Name))) { if ($message) { $errors.Add($message) } }
             foreach ($phase in 'PreInstall', 'PostInstall') {
                 $hook = Get-AhuValue $property.Value $phase
                 if (-not $hook) { continue }

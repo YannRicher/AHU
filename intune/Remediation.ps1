@@ -1554,7 +1554,8 @@ function Install-AhuApp {
     if ($App.PSObject.Properties['SelectedLocale']) {
         Write-AhuLog ('{0}: installateur {1} retenu (langue systeme {2})' -f $id, $App.SelectedLocale, [System.Globalization.CultureInfo]::InstalledUICulture.Name)
     }
-    $version = [string](Get-AhuValue $App 'Version' '')
+    # Trim: une version avec espaces (ex. ProductVersion complete par des espaces) casserait le chemin du cache
+    $version = ([string](Get-AhuValue $App 'Version' '')).Trim()
     $type = ([string](Get-AhuValue $App 'InstallerType' '')).ToUpperInvariant()
     $url = [string](Get-AhuValue $App 'DownloadUrl' '')
 
@@ -1562,20 +1563,15 @@ function Install-AhuApp {
     $relaunchPaths = @()
 
     # 1. Processus en conflit (ex.: Zoom ouvert pendant une reunion)
+    #    Skip: report immediat. Kill: les processus ne sont fermes qu'apres le telechargement et les verifications
+    #    (etape 3c), pour ne jamais fermer l'application de l'utilisateur si l'installation ne peut pas avoir lieu.
+    $killConflicts = ([string](Get-AhuValue $App 'ConflictAction' 'Skip') -eq 'Kill')
     $conflicts = @(Get-AhuConflictingProcess -App $App)
-    if ($conflicts.Count -gt 0) {
+    if ($conflicts.Count -gt 0 -and -not $killConflicts) {
         $names = (@($conflicts | ForEach-Object { $_.ProcessName } | Select-Object -Unique)) -join ', '
-        if ([string](Get-AhuValue $App 'ConflictAction' 'Skip') -eq 'Kill') {
-            Write-AhuLog ('{0}: fermeture des processus en conflit ({1})' -f $id, $names)
-            $relaunchPaths = @($conflicts | Where-Object { $_.Path } | ForEach-Object { $_.Path } | Select-Object -Unique)
-            $conflicts | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 3
-        }
-        else {
-            $message = 'installation reportee, processus en cours d''execution: {0}' -f $names
-            Write-AhuLog ('{0}: {1}' -f $id, $message) -Level Warning
-            return New-AhuInstallResult -Status Deferred -Message $message
-        }
+        $message = 'installation reportee, processus en cours d''execution: {0}' -f $names
+        Write-AhuLog ('{0}: {1}' -f $id, $message) -Level Warning
+        return New-AhuInstallResult -Status Deferred -Message $message
     }
 
     $appCache = Join-Path $DataRoot ('Cache\{0}' -f $id)
@@ -1635,6 +1631,18 @@ function Install-AhuApp {
         if ($hookFiles.Count -gt 0) {
             $previous = Find-AhuInstalledApp -App $App
             if ($previous) { $previousVersion = [string]$previous.DisplayVersion }
+        }
+
+        # 3c. ConflictAction=Kill: fermeture des processus, seulement maintenant que l'installateur est telecharge et verifie
+        if ($killConflicts) {
+            $running = @(Get-AhuConflictingProcess -App $App)
+            if ($running.Count -gt 0) {
+                $names = (@($running | ForEach-Object { $_.ProcessName } | Select-Object -Unique)) -join ', '
+                Write-AhuLog ('{0}: fermeture des processus en conflit ({1})' -f $id, $names)
+                $relaunchPaths = @($running | Where-Object { $_.Path } | ForEach-Object { $_.Path } | Select-Object -Unique)
+                $running | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 3
+            }
         }
 
         if ($hookFiles.ContainsKey('PreInstall')) {
@@ -1728,8 +1736,8 @@ function Install-AhuApp {
 # Version du moteur: a incrementer a chaque changement de code execute sur les postes
 # (apparait dans AHU.log pour savoir quel moteur a roule). Le build est une empreinte du code,
 # calculee par automation/Build-IntuneScripts.ps1 ('sources' = modules du depot, hors Intune).
-$script:AhuEngineVersion = '1.3.1'
-$script:AhuEngineBuild = 'dcf7e9b4'
+$script:AhuEngineVersion = '1.3.2'
+$script:AhuEngineBuild = 'd7122807'
 
 function Get-AhuEngineVersion {
     [CmdletBinding()]

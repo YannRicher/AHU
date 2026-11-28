@@ -361,10 +361,10 @@ Describe 'Relance apres ConflictAction Kill' {
         $fakeApp = 'C:\Fake\ShareX.exe'
 
         function New-KillFixture {
-            param([string]$Action = 'Kill', [string]$Arguments = '/c exit 0')
+            param([string]$Action = 'Kill', [string]$Arguments = '/c exit 0', [string]$Version = '22.4.0', [string]$Sha256 = $cmdHash)
             [pscustomobject]@{
-                Id = 'ShareX'; Name = 'ShareX'; Mode = 'Auto'; Version = '22.4.0'
-                DownloadUrl = 'https://test/setup.exe'; Sha256 = $cmdHash; InstallerType = 'EXE'
+                Id = 'ShareX'; Name = 'ShareX'; Mode = 'Auto'; Version = $Version
+                DownloadUrl = 'https://test/setup.exe'; Sha256 = $Sha256; InstallerType = 'EXE'
                 InstallArguments = $Arguments; RequireSignature = $false; DetectionName = @('ShareX*')
                 ConflictingProcesses = @('ShareX'); ConflictAction = $Action
             }
@@ -407,6 +407,40 @@ Describe 'Relance apres ConflictAction Kill' {
         $result.Status | Should -Be 'Deferred'
         Should -Invoke -ModuleName Installer Stop-Process -Times 0 -Exactly
         Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 0 -Exactly
+    }
+
+    It 'telechargement en echec: l''application n''est ni fermee ni relancee' {
+        Mock -ModuleName Installer Save-AhuFile { throw 'echec reseau' }
+        $result = Install-AhuApp -App (New-KillFixture) -DataRoot $dir
+        $result.Status | Should -Be 'Failed'
+        Should -Invoke -ModuleName Installer Stop-Process -Times 0 -Exactly
+        Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 0 -Exactly
+    }
+
+    It 'SHA256 invalide: l''application n''est ni fermee ni relancee' {
+        $result = Install-AhuApp -App (New-KillFixture -Sha256 ('0' * 64)) -DataRoot $dir
+        $result.Status | Should -Be 'Failed'
+        Should -Invoke -ModuleName Installer Stop-Process -Times 0 -Exactly
+        Should -Invoke -ModuleName Installer Start-AhuUserProcess -Times 0 -Exactly
+    }
+
+    It 'ferme l''application apres le telechargement, pas avant' {
+        $orderLog = Join-Path $dir 'order.txt'
+        Mock -ModuleName Installer Save-AhuFile {
+            Add-Content -LiteralPath $orderLog -Value 'telechargement'
+            New-Item -ItemType Directory -Path (Split-Path -Path $Destination -Parent) -Force | Out-Null
+            Copy-Item -LiteralPath $cmdExe -Destination $Destination -Force
+        }
+        Mock -ModuleName Installer Stop-Process { Add-Content -LiteralPath $orderLog -Value 'fermeture' }
+        $result = Install-AhuApp -App (New-KillFixture) -DataRoot $dir
+        $result.Status | Should -Be 'Installed'
+        @(Get-Content -LiteralPath $orderLog) | Should -Be @('telechargement', 'fermeture')
+    }
+
+    It 'une version avec espaces superflus ne casse pas le chemin du cache' {
+        $result = Install-AhuApp -App (New-KillFixture -Version '22.4.0      ') -DataRoot $dir
+        $result.Status | Should -Be 'Installed'
+        Should -Invoke -ModuleName Installer Save-AhuFile -Times 1 -Exactly -ParameterFilter { $Destination -notmatch '\s\\' -and $Destination -match '22\.4\.0\\' }
     }
 
     It 'sans conflit, aucune relance' {

@@ -2,7 +2,7 @@
   "Id": "ShareX",
   "Name": "ShareX",
   "Mode": "Auto",
-  "Version": "22.5.0                                            ",
+  "Version": "22.5.0",
   "DownloadUrl": "https://github.com/ShareX/ShareX/releases/download/v22.5.0/ShareX-22.5.0-setup-x64.exe",
   "Sha256": "0AC699FDE6D29C53EC135864509A7B802FA2E9004484F34165095E5A744D4C0F",
   "InstallerType": "EXE",

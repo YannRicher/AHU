@@ -3,7 +3,7 @@
 # Version du moteur: a incrementer a chaque changement de code execute sur les postes
 # (apparait dans AHU.log pour savoir quel moteur a roule). Le build est une empreinte du code,
 # calculee par automation/Build-IntuneScripts.ps1 ('sources' = modules du depot, hors Intune).
-$script:AhuEngineVersion = '1.3.1'
+$script:AhuEngineVersion = '1.3.2'
 $script:AhuEngineBuild = 'sources'
 
 function Get-AhuEngineVersion {
